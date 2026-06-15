@@ -1,6 +1,3 @@
-# RTnexen_UPS_PMC
-寵物飲水機不斷電系統
-=======
 # RTnexen PPS Tool
 
 一鍵 Push、Pull 和查看 Status 的 KiCad Git 工具。
