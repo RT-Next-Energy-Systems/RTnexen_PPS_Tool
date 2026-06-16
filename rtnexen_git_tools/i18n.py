@@ -49,6 +49,15 @@ def set_global_remote2(name, path):
     cfg["remote2_path"] = path
     _save(cfg)
 
+def get_global_remote2_url():
+    """Returns the last-known Remote 2 git remote URL stored in global config."""
+    return _load().get("remote2_url", "")
+
+def set_global_remote2_url(url):
+    cfg = dict(_load())
+    cfg["remote2_url"] = url
+    _save(cfg)
+
 def get_skipped_version():
     return _load().get("skipped_version", "")
 
@@ -103,9 +112,9 @@ STRINGS = {
     "subtitle_settings": {LANG_ZH: "設定",     LANG_EN: "Settings"},
 
     # Main menu
-    "btn_push":   {LANG_ZH: "↑   推送 (Push)",   LANG_EN: "↑   Git Push"},
-    "btn_pull":   {LANG_ZH: "↓   拉取 (Pull)",   LANG_EN: "↓   Git Pull"},
-    "btn_status": {LANG_ZH: "●   狀態 (Status)", LANG_EN: "●   Git Status"},
+    "btn_push":   {LANG_ZH: "↑   Git Push",   LANG_EN: "↑   Git Push"},
+    "btn_pull":   {LANG_ZH: "↓   Git Pull",   LANG_EN: "↓   Git Pull"},
+    "btn_status": {LANG_ZH: "●   Git Status", LANG_EN: "●   Git Status"},
     "tip_push":   {LANG_ZH: "提交並推送變更到遠端", LANG_EN: "Commit & push changes to remote"},
     "tip_pull":   {LANG_ZH: "從遠端拉取最新變更",   LANG_EN: "Pull latest changes from remote"},
     "tip_status": {LANG_ZH: "查看分支、變更與最近紀錄", LANG_EN: "View branch, changes & recent log"},

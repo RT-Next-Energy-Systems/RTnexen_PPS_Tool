@@ -1,9 +1,11 @@
 import wx
 import json
 import threading
+from datetime import datetime
 
 from .i18n import (
     t, get_language, set_language, get_global_remote2, set_global_remote2,
+    get_global_remote2_url, set_global_remote2_url,
     get_config_snapshot, import_config_snapshot,
     LANG_ZH, LANG_EN,
 )
@@ -63,6 +65,7 @@ class SettingsDialog(wx.Dialog):
         self.scope_radio = wx.RadioBox(panel, label=t("label_scope"),
                                         choices=[t("scope_project"), t("scope_global")],
                                         majorDimension=2, style=wx.RA_SPECIFY_COLS)
+        self.scope_radio.SetSelection(1)  # default: Global
         self.scope_radio.Bind(wx.EVT_RADIOBOX, self._on_scope_change)
         bs2.Add(self.scope_radio, 0, wx.EXPAND | wx.ALL, 8)
 
@@ -155,7 +158,7 @@ class SettingsDialog(wx.Dialog):
         # Per-scope draft cache for Remote 2 fields, so toggling
         # "label_scope" does not silently discard unsaved edits.
         self._remote2_drafts = {}
-        self._current_scope = "project"
+        self._current_scope = "global"
 
         # Updated once the initial async load completes (_populate) and
         # again after every successful Apply/Save — compared against
@@ -201,15 +204,22 @@ class SettingsDialog(wx.Dialog):
         self.EndModal(wx.ID_SAVE)
 
     def _on_export_settings(self, event):
+        ts = datetime.now().strftime("rt_ppst_%Y-%m_%d_%H_%M")
         dlg = wx.FileDialog(self, t("export_settings"),
-                             defaultFile="rtnexen_pps_tool_settings.json",
+                             defaultFile=f"{ts}.json",
                              wildcard="JSON (*.json)|*.json",
                              style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT)
         if dlg.ShowModal() == wx.ID_OK:
             path = dlg.GetPath()
             try:
+                snapshot = get_config_snapshot()
+                # Also capture the current URL from the UI field so it
+                # survives cross-machine import (URL is not in git config).
+                url2 = self.url2_ctrl.GetValue().strip()
+                if url2:
+                    snapshot["remote2_url"] = url2
                 with open(path, "w", encoding="utf-8") as f:
-                    json.dump(get_config_snapshot(), f, ensure_ascii=False, indent=2)
+                    json.dump(snapshot, f, ensure_ascii=False, indent=2)
                 wx.MessageBox(t("export_settings_ok", path=path), APPNAME, wx.OK | wx.ICON_INFORMATION)
             except OSError as e:
                 wx.MessageBox(t("export_settings_fail", err=str(e)), APPNAME, wx.OK | wx.ICON_ERROR)
@@ -237,6 +247,9 @@ class SettingsDialog(wx.Dialog):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
+            # Don't restore machine-specific local path — it's different
+            # on every computer. URL and name are safe to import.
+            cfg.pop("remote2_path", None)
             import_config_snapshot(cfg)
         except (OSError, ValueError) as e:
             wx.MessageBox(t("import_settings_fail", err=str(e)), APPNAME, wx.OK | wx.ICON_ERROR)
@@ -267,6 +280,8 @@ class SettingsDialog(wx.Dialog):
             if path2 and is_git_repo(path2):
                 u2 = _run(["git", "remote", "get-url", "origin"], path2)
                 url2 = u2.stdout.strip() if u2.returncode == 0 else ""
+            if not url2:
+                url2 = get_global_remote2_url()
 
             branch = _run(["git", "branch", "--show-current"], path)
             wx.CallAfter(self._populate, name1, url1, scope, name2, path2, url2,
@@ -318,6 +333,8 @@ class SettingsDialog(wx.Dialog):
             if path2 and is_git_repo(path2):
                 u2 = _run(["git", "remote", "get-url", "origin"], path2)
                 url2 = u2.stdout.strip() if u2.returncode == 0 else ""
+            if not url2 and new_scope == "global":
+                url2 = get_global_remote2_url()
             wx.CallAfter(self._apply_scope_fetch, new_scope, name2, path2, url2)
         threading.Thread(target=worker, daemon=True).start()
 
@@ -429,6 +446,8 @@ class SettingsDialog(wx.Dialog):
                         r2 = _run(["git", "remote", "add", "origin", url2], path2)
                     if r2.returncode == 0:
                         results.append(t("r2_url_ok"))
+                        if scope == "global":
+                            set_global_remote2_url(url2)
                     else:
                         results.append(t("r2_url_fail", err=r2.stderr.strip()))
             else:

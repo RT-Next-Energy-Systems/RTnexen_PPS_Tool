@@ -28,7 +28,8 @@ class BaseGitDialog(wx.Dialog):
         hdr.SetBackgroundColour(self.HDR)
         hs = wx.BoxSizer(wx.HORIZONTAL)
 
-        lbl = wx.StaticText(hdr, label=f"{APPNAME}  —  {subtitle}")
+        lbl_text = f"{APPNAME}  —  {subtitle}" if subtitle else APPNAME
+        lbl = wx.StaticText(hdr, label=lbl_text)
         lbl.SetForegroundColour(self.CYAN)
         lbl.SetFont(wx.Font(11, wx.FONTFAMILY_DEFAULT,
                             wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))

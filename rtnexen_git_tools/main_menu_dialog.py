@@ -10,7 +10,7 @@ from .base_dialog import BaseGitDialog
 
 class MainMenuDialog(BaseGitDialog):
     def __init__(self, project_path):
-        super().__init__(t_en("subtitle_select_action"), project_path,
+        super().__init__("", project_path,
                          size=get_dialog_size(0.42, 0.62))
         p  = self.panel
         cs = self.content_sizer

@@ -5,7 +5,7 @@ import platform
 
 from .i18n import t, get_global_remote2
 
-VERSION = "3.0.0"
+VERSION = "3.0.1"
 APPNAME = "RTnexen PPS Tool"
 
 ID_BACK = wx.ID_HIGHEST + 100
@@ -33,11 +33,12 @@ def is_git_repo(path):
     return r.returncode == 0
 
 def get_remote2_scope(project_path):
-    """Return 'global' or 'project' (default) — where Remote 2's name/path
-    are persisted. The two scopes store independent data; switching the
-    scope does not erase the other scope's saved values."""
+    """Return 'global' or 'project' — where Remote 2's name/path are
+    persisted. Defaults to 'global' unless explicitly set to 'project'.
+    The two scopes store independent data; switching the scope does not
+    erase the other scope's saved values."""
     scope = _run(["git", "config", "--get", "rtnexen.remote2scope"], project_path).stdout.strip()
-    return "global" if scope == "global" else "project"
+    return "project" if scope == "project" else "global"
 
 def get_remote2_config(project_path):
     """Return (name2, path2) for Remote 2, read from whichever scope is
