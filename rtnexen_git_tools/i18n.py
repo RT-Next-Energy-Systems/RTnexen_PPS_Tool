@@ -112,9 +112,9 @@ STRINGS = {
     "subtitle_settings": {LANG_ZH: "設定",     LANG_EN: "Settings"},
 
     # Main menu
-    "btn_push":   {LANG_ZH: "↑   Git Push",   LANG_EN: "↑   Git Push"},
-    "btn_pull":   {LANG_ZH: "↓   Git Pull",   LANG_EN: "↓   Git Pull"},
-    "btn_status": {LANG_ZH: "●   Git Status", LANG_EN: "●   Git Status"},
+    "btn_push":   {LANG_ZH: "↑   Push",   LANG_EN: "↑   Push"},
+    "btn_pull":   {LANG_ZH: "↓   Pull",   LANG_EN: "↓   Pull"},
+    "btn_status": {LANG_ZH: "●   Status", LANG_EN: "●   Status"},
     "tip_push":   {LANG_ZH: "提交並推送變更到遠端", LANG_EN: "Commit & push changes to remote"},
     "tip_pull":   {LANG_ZH: "從遠端拉取最新變更",   LANG_EN: "Pull latest changes from remote"},
     "tip_status": {LANG_ZH: "查看分支、變更與最近紀錄", LANG_EN: "View branch, changes & recent log"},
@@ -167,6 +167,8 @@ STRINGS = {
     # Settings apply results
     "r1_name_default": {LANG_ZH: "Remote 1：使用預設名稱（'{name}'）", LANG_EN: "Remote 1: using default name ('{name}')"},
     "r1_name_saved": {LANG_ZH: "Remote 1（'{name}'）：名稱已儲存", LANG_EN: "Remote 1 ('{name}'): name saved"},
+    "r1_git_init_ok":   {LANG_ZH: "已自動執行 git init 並設定 Remote 1 URL", LANG_EN: "git init completed and Remote 1 URL set"},
+    "r1_git_init_fail": {LANG_ZH: "git init 失敗：{err}", LANG_EN: "git init failed: {err}"},
     "r1_url_ok":     {LANG_ZH: "Remote 1 URL：OK", LANG_EN: "Remote 1 URL: OK"},
     "r1_url_fail":   {LANG_ZH: "Remote 1 URL：失敗 - {err}", LANG_EN: "Remote 1 URL: failed - {err}"},
     "r2_cleared":    {LANG_ZH: "Remote 2：已清除", LANG_EN: "Remote 2: cleared"},
@@ -212,7 +214,9 @@ STRINGS = {
 
     # Operation logs
     "log_gitignore_created":  {LANG_ZH: "▶ 未偵測到 .gitignore，已自動建立", LANG_EN: "▶ No .gitignore found — created automatically"},
+    "log_gitignore_updated":  {LANG_ZH: "▶ 已更新 .gitignore（補上缺少的排除項目）", LANG_EN: "▶ Updated .gitignore with missing entries"},
     "log_gitignore_failed":   {LANG_ZH: "⚠  建立 .gitignore 失敗：{err}", LANG_EN: "⚠  Failed to create .gitignore: {err}"},
+    "log_untracked_history":  {LANG_ZH: "▶ 已將 .history 從 git 追蹤中移除（已加入 .gitignore）", LANG_EN: "▶ Removed .history from git tracking (added to .gitignore)"},
     "log_staging":            {LANG_ZH: "▶ 正在加入所有變更...", LANG_EN: "▶ Staging all changes..."},
     "log_committing":         {LANG_ZH: "▶ 正在提交：\"{msg}\"", LANG_EN: "▶ Committing: \"{msg}\""},
     "log_nothing_to_commit":  {LANG_ZH: "  （沒有新變更 — 仍繼續推送）", LANG_EN: "  (Nothing new to commit — pushing anyway)"},
@@ -280,6 +284,8 @@ STRINGS = {
     # Main dialog / misc
     "not_git_repo":      {LANG_ZH: "此專案不在 Git repository 內。\n\n路徑：{path}",
                            LANG_EN: "This project is not inside a Git repository.\n\nPath: {path}"},
+    "no_git_action":     {LANG_ZH: "此資料夾尚未初始化為 Git 倉庫。\n\n請先在終端機執行 git init，或至 ⚙ 設定確認路徑後重試。\n\n路徑：{path}",
+                           LANG_EN: "This folder is not a Git repository yet.\n\nRun 'git init' in a terminal first, or check the path in ⚙ Settings.\n\nPath: {path}"},
     "commit_msg_empty":  {LANG_ZH: "Commit 訊息不可為空。", LANG_EN: "Commit message cannot be empty."},
 
     # Update check

@@ -2,7 +2,7 @@ import wx
 import threading
 
 from .i18n import t, t_en
-from .common import _run, is_git_repo, get_target_configs, get_dialog_size
+from .common import _run, is_git_repo, get_target_configs, get_dialog_size, untrack_ignored_files
 from .base_dialog import BaseGitDialog
 
 # Status indicator dot colors shown as an icon on each StatusDialog tab:
@@ -136,6 +136,12 @@ def _status_fn(log, path, name):
         log(t("status_sync", info=first.replace('## ', '')))
     log("")
 
+    # Untrack files that are now ignored; also explicitly handle .history which
+    # may be a nested git dir (not caught by --ignored flag on some git versions)
+    untrack_ignored_files(path)
+    tracked_history = _run(["git", "ls-files", "--cached", "--", ".history"], path)
+    if tracked_history.stdout.strip():
+        _run(["git", "rm", "-r", "--cached", "--", ".history"], path)
     st = _run(["git", "status", "--porcelain"], path)
     if st.stdout.strip():
         log(t("status_uncommitted"))

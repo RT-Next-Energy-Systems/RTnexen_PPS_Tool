@@ -3,7 +3,7 @@ import os
 import threading
 
 from .i18n import t, t_en
-from .common import APPNAME, _run, get_dialog_size, _build_target_choices
+from .common import APPNAME, _run, get_dialog_size, _build_target_choices, untrack_ignored_files
 from .base_dialog import BaseGitDialog
 
 # ── Push Form Dialog ──────────────────────────────────────────────────────────
@@ -164,16 +164,30 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# VS Code Local History
+.history/
 """
+
+_REQUIRED_IGNORES = [".history/", "__pycache__/", "*.pyc", ".DS_Store", "Thumbs.db"]
 
 def _ensure_gitignore(log, path):
     gi_path = os.path.join(path, ".gitignore")
-    if os.path.isfile(gi_path):
-        return
     try:
-        with open(gi_path, "w", encoding="utf-8") as f:
-            f.write(GITIGNORE_TEMPLATE)
-        log(t("log_gitignore_created"))
+        if not os.path.isfile(gi_path):
+            with open(gi_path, "w", encoding="utf-8") as f:
+                f.write(GITIGNORE_TEMPLATE)
+            log(t("log_gitignore_created"))
+        else:
+            with open(gi_path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+            missing = [e for e in _REQUIRED_IGNORES if e not in content]
+            if missing:
+                with open(gi_path, "a", encoding="utf-8") as f:
+                    f.write("\n# Added by RTnexen PPS Tool\n")
+                    for e in missing:
+                        f.write(e + "\n")
+                log(t("log_gitignore_updated"))
     except OSError as e:
         log(t("log_gitignore_failed", err=str(e)))
 
@@ -190,6 +204,17 @@ def _push_fn(log, project_path):
 
 def _push_one(log, path, commit_msg):
     _ensure_gitignore(log, path)
+
+    removed = untrack_ignored_files(path)
+    # Also explicitly untrack .history — it may be a nested git repo which
+    # git ls-files --ignored does not list on all git versions
+    tracked_history = _run(["git", "ls-files", "--cached", "--", ".history"], path)
+    if tracked_history.stdout.strip():
+        _run(["git", "rm", "-r", "--cached", "--", ".history"], path)
+        if ".history" not in removed:
+            removed.append(".history")
+    if removed:
+        log(t("log_untracked_history"))
 
     log(t("log_staging"))
     r = _run(["git", "add", "-A"], path)

@@ -5,7 +5,7 @@ import platform
 
 from .i18n import t, get_global_remote2
 
-VERSION = "3.0.1"
+VERSION = "3.1.0"
 APPNAME = "RTnexen PPS Tool"
 
 ID_BACK = wx.ID_HIGHEST + 100
@@ -80,6 +80,17 @@ def center_on_screen(dlg):
         geo.x + (geo.width  - w) // 2,
         geo.y + (geo.height - h) // 2,
     ))
+
+def untrack_ignored_files(path):
+    """Remove tracked files that now match .gitignore from the git index.
+    Returns list of paths that were untacked (empty list if none)."""
+    r = _run(["git", "ls-files", "--cached", "--ignored", "--exclude-standard"], path)
+    if r.returncode != 0 or not r.stdout.strip():
+        return []
+    files = r.stdout.strip().splitlines()
+    for f in files:
+        _run(["git", "rm", "-r", "--cached", "--", f], path)
+    return files
 
 # ── Target selector helper ──────────────────────────────────────────────────
 

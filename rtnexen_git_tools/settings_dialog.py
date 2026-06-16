@@ -95,10 +95,6 @@ class SettingsDialog(wx.Dialog):
         bs2.Add(hint2, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
         sizer.Add(bs2, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 
-        apply_btn = wx.Button(panel, label=t("apply"))
-        apply_btn.Bind(wx.EVT_BUTTON, self._apply)
-        sizer.Add(apply_btn, 0, wx.LEFT | wx.BOTTOM, 22)
-
         branch_row = wx.BoxSizer(wx.HORIZONTAL)
         branch_row.Add(wx.StaticText(panel, label=t("current_branch")),
                         0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
@@ -378,15 +374,27 @@ class SettingsDialog(wx.Dialog):
             results.append(t("r1_name_saved", name=name1))
 
         if url1:
-            existing = _run(["git", "remote", "get-url", "origin"], path)
-            if existing.returncode == 0:
-                r = _run(["git", "remote", "set-url", "origin", url1], path)
+            if not is_git_repo(path):
+                ri = _run(["git", "init"], path)
+                if ri.returncode != 0:
+                    results.append(t("r1_git_init_fail", err=ri.stderr.strip()))
+                else:
+                    _run(["git", "branch", "-M", "main"], path)
+                    ra = _run(["git", "remote", "add", "origin", url1], path)
+                    if ra.returncode == 0:
+                        results.append(t("r1_git_init_ok"))
+                    else:
+                        results.append(t("r1_url_fail", err=ra.stderr.strip()))
             else:
-                r = _run(["git", "remote", "add", "origin", url1], path)
-            if r.returncode == 0:
-                results.append(t("r1_url_ok"))
-            else:
-                results.append(t("r1_url_fail", err=r.stderr.strip()))
+                existing = _run(["git", "remote", "get-url", "origin"], path)
+                if existing.returncode == 0:
+                    r = _run(["git", "remote", "set-url", "origin", url1], path)
+                else:
+                    r = _run(["git", "remote", "add", "origin", url1], path)
+                if r.returncode == 0:
+                    results.append(t("r1_url_ok"))
+                else:
+                    results.append(t("r1_url_fail", err=r.stderr.strip()))
 
         # ── Remote 2 (independent repo) ──
         # Note: rtnexen.remote2scope is only written when a save/clear is

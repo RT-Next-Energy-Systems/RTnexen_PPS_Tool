@@ -36,7 +36,7 @@ class BaseGitDialog(wx.Dialog):
         hs.Add(lbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 14)
         hs.AddStretchSpacer()
 
-        self.branch_lbl = wx.StaticText(hdr, label="⎇  ...")
+        self.branch_lbl = wx.StaticText(hdr, label="⎇  ...  ")
         self.branch_lbl.SetForegroundColour(self.GREEN)
         self.branch_lbl.SetFont(wx.Font(10, wx.FONTFAMILY_TELETYPE,
                                         wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
@@ -72,7 +72,7 @@ class BaseGitDialog(wx.Dialog):
 
     def _set_branch(self, branch):
         if self.branch_lbl:
-            self.branch_lbl.SetLabel(f"⎇  {branch}")
+            self.branch_lbl.SetLabel(f"⎇  {branch}  ")
 
     def _on_settings(self, event):
         old_lang = get_language()

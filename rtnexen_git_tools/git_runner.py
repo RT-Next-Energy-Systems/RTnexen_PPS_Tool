@@ -1,7 +1,7 @@
 import wx
 
 from .i18n import t, t_en
-from .common import VERSION, APPNAME, ID_BACK, is_git_repo
+from .common import VERSION, APPNAME, ID_BACK
 from .update_check import check_for_update_async
 
 from .main_menu_dialog import MainMenuDialog
@@ -75,11 +75,6 @@ def run_status(project_path):
         run_main_dialog(project_path)
 
 def run_main_dialog(project_path):
-    if not is_git_repo(project_path):
-        wx.MessageBox(
-            t("not_git_repo", path=project_path),
-            APPNAME, wx.OK | wx.ICON_ERROR)
-        return
     check_for_update_async(VERSION)
     dlg = MainMenuDialog(project_path)
     dlg.ShowModal()

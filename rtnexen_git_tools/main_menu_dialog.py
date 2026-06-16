@@ -1,7 +1,7 @@
 import wx
 
-from .i18n import t_en
-from .common import get_dialog_size
+from .i18n import t, t_en
+from .common import get_dialog_size, is_git_repo, APPNAME
 from .base_dialog import BaseGitDialog
 
 # ── Main Menu Dialog ──────────────────────────────────────────────────────────
@@ -37,17 +37,31 @@ class MainMenuDialog(BaseGitDialog):
         cs.Add(row, 0, wx.EXPAND | wx.ALL, 14)
         self.FinalizeLayout()
 
+    def _require_git(self):
+        if not is_git_repo(self.project_path):
+            wx.MessageBox(
+                t("no_git_action", path=self.project_path),
+                APPNAME, wx.OK | wx.ICON_WARNING)
+            return False
+        return True
+
     def _push(self, e):
+        if not self._require_git():
+            return
         self.EndModal(wx.ID_OK)
         from .git_runner import run_push
         run_push(self.project_path)
 
     def _pull(self, e):
+        if not self._require_git():
+            return
         self.EndModal(wx.ID_OK)
         from .git_runner import run_pull
         run_pull(self.project_path)
 
     def _status(self, e):
+        if not self._require_git():
+            return
         self.EndModal(wx.ID_OK)
         from .git_runner import run_status
         run_status(self.project_path)
