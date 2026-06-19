@@ -10,9 +10,9 @@ from .i18n import t, get_skipped_version, set_skipped_version
 APPNAME = "RTnexen PPS Tool"
 REPO = "RT-Next-Energy-Systems/RTnexen_PPS_Tool"
 REPO_URL = f"https://github.com/{REPO}"
-TAGS_API_URL = f"https://api.github.com/repos/{REPO}/tags"
+RELEASE_API_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
 README_URL = f"https://raw.githubusercontent.com/{REPO}/{{tag}}/README.md"
-TIMEOUT = 3
+TIMEOUT = 8
 
 # ── Version helpers ────────────────────────────────────────────────────────
 
@@ -39,17 +39,9 @@ def _fetch_text(url):
     with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
         return resp.read().decode("utf-8", errors="replace")
 
-def _latest_tag():
-    tags = _fetch_json(TAGS_API_URL)
-    best_name, best_v = None, None
-    for tag in tags:
-        name = tag.get("name", "")
-        if not name:
-            continue
-        v = _parse_version(name)
-        if best_v is None or v > best_v:
-            best_v, best_name = v, name
-    return best_name
+def _latest_release():
+    data = _fetch_json(RELEASE_API_URL)
+    return data.get("tag_name", "").strip() or None
 
 # ── Entry point ────────────────────────────────────────────────────────────
 
@@ -59,7 +51,7 @@ def check_for_update_async(current_version):
     non-skipped tag is found."""
     def worker():
         try:
-            latest = _latest_tag()
+            latest = _latest_release()
             if not latest:
                 return
             if _parse_version(latest) <= _parse_version(current_version):

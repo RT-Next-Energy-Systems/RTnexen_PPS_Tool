@@ -2,7 +2,6 @@ import wx
 
 from .i18n import t, t_en
 from .common import VERSION, APPNAME, ID_BACK
-from .update_check import check_for_update_async
 
 from .main_menu_dialog import MainMenuDialog
 from .push_dialog import PushDialog, _push_fn
@@ -75,7 +74,6 @@ def run_status(project_path):
         run_main_dialog(project_path)
 
 def run_main_dialog(project_path):
-    check_for_update_async(VERSION)
     dlg = MainMenuDialog(project_path)
     dlg.ShowModal()
     dlg.Destroy()

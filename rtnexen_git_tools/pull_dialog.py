@@ -93,8 +93,34 @@ def _ask_conflict_dialog(title, message):
     done.wait()
     return result["choice"]
 
-def _overwrite_local(log, path):
-    """Discard local changes (and abort any in-progress merge), then pull."""
+def _get_branch(path):
+    """Return the current branch name, or empty string if detached/unknown."""
+    r = _run(["git", "branch", "--show-current"], path)
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+def _ensure_upstream(log, path, branch):
+    """If current branch has no upstream, set it to origin/<branch>.
+    Returns True if upstream is confirmed available (existing or just set)."""
+    r = _run(["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], path)
+    if r.returncode == 0:
+        return True  # upstream already set
+    if not branch:
+        return False
+    log(t("log_upstream_set", branch=branch))
+    rs = _run(["git", "branch", "--set-upstream-to", f"origin/{branch}", branch], path)
+    if rs.returncode != 0:
+        log(t("log_upstream_fail"))
+        return False
+    return True
+
+def _do_pull(log, path, branch):
+    """Run pull with explicit remote/branch to avoid bare-pull failures."""
+    if branch:
+        return _run(["git", "pull", "origin", branch], path)
+    return _run(["git", "pull"], path)
+
+def _overwrite_local(log, path, branch):
+    """Scenario A/C: discard local changes (abort merge if any) then re-pull."""
     merge_head = _run(["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"], path)
     if merge_head.returncode == 0:
         log(t("log_merge_abort"))
@@ -109,11 +135,11 @@ def _overwrite_local(log, path):
         return False
 
     log(t("log_repulling"))
-    r = _run(["git", "pull"], path)
+    r = _do_pull(log, path, branch)
     out = r.stdout.strip()
     err = r.stderr.strip()
     if r.returncode != 0:
-        log(t("log_pull_failed", combined=(out + chr(10) + err).strip()))
+        log(t("log_pull_failed", combined=(out + "\n" + err).strip()))
         return False
 
     if out:
@@ -123,9 +149,28 @@ def _overwrite_local(log, path):
         log(t("log_reload_hint"))
     return True
 
+def _reset_to_remote(log, path, branch):
+    """Scenario B: force-sync local to remote via fetch + reset --hard."""
+    log(t("log_reset_to_remote"))
+    rf = _run(["git", "fetch", "origin"], path)
+    if rf.returncode != 0:
+        log(t("log_reset_failed", err=rf.stderr.strip()))
+        return False
+    ref = f"origin/{branch}" if branch else "origin"
+    rr = _run(["git", "reset", "--hard", ref], path)
+    if rr.returncode != 0:
+        log(t("log_reset_failed", err=rr.stderr.strip()))
+        return False
+    log(t("log_reset_done"))
+    log(t("log_reload_hint"))
+    return True
+
 def _pull_one(log, path):
     """Pull the repo at `path`. Returns True if the caller may continue to
     the next target (ALL mode), False if the user aborted or it failed."""
+    branch = _get_branch(path)
+
+    # ── Scenario A: uncommitted local changes ─────────────────────────────
     log(t("log_checking_status"))
     st = _run(["git", "status", "--porcelain"], path)
     if st.stdout.strip():
@@ -140,29 +185,35 @@ def _pull_one(log, path):
         choice = _ask_conflict_dialog(t("conflict_uncommitted_title"), msg)
         if choice == wx.ID_YES:
             log("")
-            return _overwrite_local(log, path)
+            _ensure_upstream(log, path, branch)
+            return _overwrite_local(log, path, branch)
         else:
             log(t("log_pull_cancel_keep"))
             return False
 
+    # ── Ensure upstream is set before pulling ────────────────────────────
+    _ensure_upstream(log, path, branch)
+
     log(t("log_running_pull"))
-    r = _run(["git", "pull"], path)
+    r = _do_pull(log, path, branch)
     out = r.stdout.strip()
     err = r.stderr.strip()
     combined = (out + "\n" + err).strip()
 
     if r.returncode != 0:
+        # ── Scenario B: non-fast-forward ──────────────────────────────────
         if _is_non_fast_forward(combined):
             log(t("log_non_ff", combined=combined))
             msg = _build_conflict_message(t("conflict_nonff_summary"))
             choice = _ask_conflict_dialog(t("conflict_nonff_title"), msg)
             if choice == wx.ID_YES:
                 log("")
-                return _overwrite_local(log, path)
+                return _reset_to_remote(log, path, branch)
             else:
                 log(t("log_pull_cancel_retry"))
                 return False
 
+        # ── Scenario C: post-pull merge conflict ──────────────────────────
         if _is_merge_conflict(combined):
             conflicted = _run(["git", "diff", "--name-only", "--diff-filter=U"], path)
             files = conflicted.stdout.strip().splitlines()
@@ -175,7 +226,7 @@ def _pull_one(log, path):
             choice = _ask_conflict_dialog(t("conflict_merge_title"), msg)
             if choice == wx.ID_YES:
                 log("")
-                return _overwrite_local(log, path)
+                return _overwrite_local(log, path, branch)
             else:
                 log(t("log_merge_conflict_cancel"))
                 return False
@@ -183,7 +234,8 @@ def _pull_one(log, path):
         log(t("log_pull_failed", combined=combined))
         return False
 
-    log(out)
+    if out:
+        log(out)
     log(t("log_pull_done"))
     if "Already up to date" not in out:
         log(t("log_reload_hint"))

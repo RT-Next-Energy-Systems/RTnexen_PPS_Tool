@@ -122,6 +122,9 @@ class SettingsDialog(wx.Dialog):
         info_s.Add(wx.StaticText(panel, label=f"{APPNAME}  v{VERSION}"), 0, wx.ALL, 8)
         info_s.Add(wx.StaticText(panel, label="rtnexen@gmail.com"),
                    0, wx.LEFT | wx.BOTTOM, 8)
+        check_btn = wx.Button(panel, label=t("btn_check_update"))
+        check_btn.Bind(wx.EVT_BUTTON, self._on_check_update)
+        info_s.Add(check_btn, 0, wx.LEFT | wx.BOTTOM, 8)
         sizer.Add(info_s, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 
         panel.SetSizer(sizer)
@@ -343,6 +346,37 @@ class SettingsDialog(wx.Dialog):
         self.name2_ctrl.SetValue(name2)
         self.path2_ctrl.SetValue(path2)
         self.url2_ctrl.SetValue(url2)
+
+    def _on_check_update(self, event):
+        import threading
+        from .update_check import _latest_release, _parse_version, _fetch_text, README_URL
+        btn = event.GetEventObject()
+        btn.Disable()
+        btn.SetLabel(t("loading"))
+        def worker():
+            try:
+                latest = _latest_release()
+                if not latest:
+                    raise ValueError("no release found")
+                if _parse_version(latest) <= _parse_version(VERSION):
+                    wx.CallAfter(self._check_update_done, btn, "latest")
+                    return
+                readme = _fetch_text(README_URL.format(tag=latest))
+                wx.CallAfter(self._check_update_done, btn, "update", latest, readme)
+            except Exception:
+                wx.CallAfter(self._check_update_done, btn, "error")
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _check_update_done(self, btn, result, latest=None, readme=None):
+        btn.Enable()
+        btn.SetLabel(t("btn_check_update"))
+        if result == "latest":
+            wx.MessageBox(t("check_update_latest", version=VERSION), APPNAME, wx.OK | wx.ICON_INFORMATION)
+        elif result == "error":
+            wx.MessageBox(t("check_update_error"), APPNAME, wx.OK | wx.ICON_WARNING)
+        else:
+            from .update_check import _show_update_dialog
+            _show_update_dialog(latest, VERSION, readme)
 
     def _confirm_global_change(self):
         dlg = wx.MessageDialog(self, t("global_change_warning"),
