@@ -66,6 +66,28 @@ def set_skipped_version(tag):
     cfg["skipped_version"] = tag
     _save(cfg)
 
+def get_commit_draft(repo_path):
+    """Return the saved draft commit message for a given repo path, or ''."""
+    return _load().get("commit_drafts", {}).get(repo_path, "")
+
+def set_commit_draft(repo_path, message):
+    """Persist a draft commit message for a repo path. Survives dialog/plugin
+    close — only cleared by clear_commit_draft (explicit Clear, or a
+    successful push for that repo)."""
+    cfg = dict(_load())
+    drafts = dict(cfg.get("commit_drafts", {}))
+    drafts[repo_path] = message
+    cfg["commit_drafts"] = drafts
+    _save(cfg)
+
+def clear_commit_draft(repo_path):
+    cfg = dict(_load())
+    drafts = dict(cfg.get("commit_drafts", {}))
+    if repo_path in drafts:
+        del drafts[repo_path]
+        cfg["commit_drafts"] = drafts
+        _save(cfg)
+
 def get_config_snapshot():
     """Return a copy of the entire global config (for export)."""
     return dict(_load())
@@ -190,6 +212,14 @@ STRINGS = {
     "no_changes_push": {LANG_ZH: "（沒有變更 — 將推送現有的 commit）", LANG_EN: "(No changes — will push existing commits)"},
     "btn_push_submit": {LANG_ZH: "推送 ↑", LANG_EN: "Push ↑"},
     "btn_pull_submit": {LANG_ZH: "拉取 ↓", LANG_EN: "Pull ↓"},
+    "btn_save_draft": {LANG_ZH: "保存草稿", LANG_EN: "Save Draft"},
+    "draft_close_confirm_title": {LANG_ZH: "尚未儲存的 Commit 變更", LANG_EN: "Unsaved Commit Changes"},
+    "draft_close_confirm_msg": {
+        LANG_ZH: "Commit 訊息已變更但尚未保存草稿，要如何處理？",
+        LANG_EN: "The commit message has changed but the draft hasn't been saved. What would you like to do?"},
+    "btn_close_back": {LANG_ZH: "返回", LANG_EN: "Back"},
+    "btn_close_save": {LANG_ZH: "儲存", LANG_EN: "Save"},
+    "btn_close_discard": {LANG_ZH: "關閉插件(不儲存)", LANG_EN: "Close Without Saving"},
     "clear": {LANG_ZH: "清除", LANG_EN: "Clear"},
     "clear_confirm_title": {LANG_ZH: "確認清除", LANG_EN: "Confirm Clear"},
     "clear_confirm_msg": {LANG_ZH: "確定要清除已輸入的 Commit 訊息嗎？此動作無法復原。",
@@ -292,6 +322,10 @@ STRINGS = {
     "no_git_action":     {LANG_ZH: "此資料夾尚未初始化為 Git 倉庫。\n\n請先在終端機執行 git init，或至 ⚙ 設定確認路徑後重試。\n\n路徑：{path}",
                            LANG_EN: "This folder is not a Git repository yet.\n\nRun 'git init' in a terminal first, or check the path in ⚙ Settings.\n\nPath: {path}"},
     "commit_msg_empty":  {LANG_ZH: "Commit 訊息不可為空。", LANG_EN: "Commit message cannot be empty."},
+    "unsaved_design_title": {LANG_ZH: "偵測到未儲存的變更", LANG_EN: "Unsaved Changes Detected"},
+    "unsaved_design_msg": {
+        LANG_ZH: "以下檔案可能在編輯器中尚有未儲存的變更：\n\n{files}\n\n建議先在原理圖/PCB 編輯器內按 Ctrl+S 儲存，再繼續 Push。\n\n是否仍要繼續？",
+        LANG_EN: "The following files may have unsaved changes still open in their editor:\n\n{files}\n\nPlease save with Ctrl+S in the Schematic/PCB editor before continuing.\n\nContinue anyway?"},
 
     # Update check
     "update_available_title": {LANG_ZH: "發現新版本", LANG_EN: "Update Available"},
@@ -304,6 +338,22 @@ STRINGS = {
     "check_update_error":  {LANG_ZH: "無法連線至 GitHub，請稍後再試。", LANG_EN: "Could not reach GitHub. Please try again later."},
     "btn_update_open":  {LANG_ZH: "更新（開啟瀏覽器）", LANG_EN: "Update (Open Browser)"},
     "btn_skip_version": {LANG_ZH: "跳過此版本", LANG_EN: "Skip This Version"},
+
+    "btn_auto_update": {LANG_ZH: "自動更新（下載並安裝）", LANG_EN: "Auto Update (Download & Install)"},
+    "auto_update_confirm_title": {LANG_ZH: "確認自動更新", LANG_EN: "Confirm Auto Update"},
+    "auto_update_confirm_msg": {
+        LANG_ZH: "即將從 GitHub 下載 v{latest} 並覆蓋目前的插件檔案。\n\n目前版本會先備份到同層資料夾，若失敗可手動還原。\n\n更新完成後須關閉並重新啟動 KiCad 才會套用新版本。\n\n是否繼續？",
+        LANG_EN: "This will download v{latest} from GitHub and overwrite the current plugin files.\n\nThe current version will be backed up to a sibling folder first; if anything fails you can restore it manually.\n\nYou must close and restart KiCad afterwards for the new version to take effect.\n\nContinue?"},
+    "auto_update_downloading": {LANG_ZH: "正在下載並安裝更新...", LANG_EN: "Downloading and installing update..."},
+    "auto_update_success": {
+        LANG_ZH: "更新完成！\n\n舊版本已備份至：\n{backup}\n\n請關閉並重新啟動 KiCad 以套用新版本。",
+        LANG_EN: "Update complete!\n\nThe previous version was backed up to:\n{backup}\n\nPlease close and restart KiCad to use the new version."},
+    "auto_update_fail": {
+        LANG_ZH: "自動更新失敗：{err}\n\n請至 GitHub 頁面手動下載安裝。",
+        LANG_EN: "Auto update failed: {err}\n\nPlease download and install manually from GitHub."},
+    "auto_update_layout_mismatch": {
+        LANG_ZH: "在下載的檔案中找不到插件資料夾，可能是 repo 結構已變更。",
+        LANG_EN: "Could not locate the plugin folder inside the downloaded archive — the repo layout may have changed."},
 }
 
 def t(key, **kwargs):

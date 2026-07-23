@@ -4,7 +4,7 @@ from .i18n import t, t_en
 from .common import VERSION, APPNAME, ID_BACK
 
 from .main_menu_dialog import MainMenuDialog
-from .push_dialog import PushDialog, _push_fn
+from .push_dialog import PushDialog, _push_fn, check_unsaved_design_files
 from .pull_dialog import PullDialog, _pull_all_fn
 from .operation_dialog import OperationDialog
 from .status_dialog import StatusDialog
@@ -12,6 +12,17 @@ from .status_dialog import StatusDialog
 # ── Public entry points ───────────────────────────────────────────────────────
 
 def run_push(project_path):
+    unsaved = check_unsaved_design_files(project_path)
+    if unsaved:
+        msg = t("unsaved_design_msg", files="\n".join(f"  • {f}" for f in unsaved))
+        confirm = wx.MessageDialog(None, msg, f"{APPNAME} — {t('unsaved_design_title')}",
+                                    wx.YES_NO | wx.ICON_WARNING)
+        confirm.SetYesNoLabels(t("ok"), t("cancel"))
+        proceed = confirm.ShowModal() == wx.ID_YES
+        confirm.Destroy()
+        if not proceed:
+            return
+
     dlg = PushDialog(project_path)
     result = dlg.ShowModal()
     if result == ID_BACK:

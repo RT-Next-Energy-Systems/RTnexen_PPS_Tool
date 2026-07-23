@@ -1,10 +1,42 @@
 import wx
 import os
+import glob
 import threading
 
-from .i18n import t, t_en
-from .common import APPNAME, _run, get_dialog_size, _build_target_choices, untrack_ignored_files
+from .i18n import t, t_en, get_commit_draft, set_commit_draft, clear_commit_draft
+from .common import APPNAME, ID_BACK, _run, get_dialog_size, _build_target_choices, untrack_ignored_files
 from .base_dialog import BaseGitDialog
+from .status_dialog import _make_dot_bitmap, STATUS_DOT_COLORS
+
+# Draft-status dot colors reuse the same palette/logic as the Status tab:
+#   grey   — commit box empty
+#   yellow — has text, not yet saved as a draft
+#   green  — current text matches the saved draft
+DRAFT_DOT_COLORS = {
+    "empty":   STATUS_DOT_COLORS[None],
+    "unsaved": STATUS_DOT_COLORS["dirty"],
+    "saved":   STATUS_DOT_COLORS["clean"],
+}
+
+# ── Unsaved design file detection ─────────────────────────────────────────────
+# KiCad writes a "_autosave-<filename>" backup file while a schematic/PCB
+# editor has unsaved changes in memory. If that autosave file is newer than
+# the real, saved file, the editor most likely still holds unsaved edits —
+# there is no direct API to query Eeschema's in-memory state from a pcbnew
+# ActionPlugin process, so this mtime comparison is the best available signal.
+
+def check_unsaved_design_files(project_path):
+    """Return a list of project-relative filenames that look like they have
+    unsaved changes in their editor (schematic and/or PCB). Searches
+    recursively so hierarchical sub-sheets kept in subfolders are covered too."""
+    warnings = []
+    for ext in ("kicad_sch", "kicad_pcb"):
+        for real in glob.glob(os.path.join(project_path, "**", f"*.{ext}"), recursive=True):
+            d, fname = os.path.split(real)
+            autosave = os.path.join(d, f"_autosave-{fname}")
+            if os.path.isfile(autosave) and os.path.getmtime(autosave) > os.path.getmtime(real):
+                warnings.append(os.path.relpath(real, project_path))
+    return warnings
 
 # ── Push Form Dialog ──────────────────────────────────────────────────────────
 
@@ -16,6 +48,7 @@ class PushDialog(BaseGitDialog):
         cs = self.content_sizer
 
         choices, self.targets = _build_target_choices(project_path)
+        self._kind_paths = {cfg["kind"]: cfg["path"] for cfg in self.targets}
 
         cs.AddSpacer(14)
         self.target_radio = wx.RadioBox(p, label=t("target"),
@@ -42,6 +75,8 @@ class PushDialog(BaseGitDialog):
 
         self.msg_panels = {}
         self.msg_ctrls = {}
+        self.dot_bitmaps = {}
+        self._saved_values = {}
         for kind, label_key, presets in (("project", "commit_message_project", project_presets),
                                           ("library", "commit_message_library", library_presets)):
             panel_k = wx.Panel(p)
@@ -52,6 +87,7 @@ class PushDialog(BaseGitDialog):
             msg_ctrl = wx.TextCtrl(panel_k, style=wx.TE_MULTILINE, size=(-1, 60))
             msg_ctrl.SetFont(
                 wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+            msg_ctrl.Bind(wx.EVT_TEXT, lambda e, k=kind: self._update_dot(k))
             sizer_k.Add(msg_ctrl, 0, wx.EXPAND | wx.BOTTOM, 4)
 
             row_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -63,20 +99,109 @@ class PushDialog(BaseGitDialog):
 
             clear_row = wx.BoxSizer(wx.HORIZONTAL)
             clear_row.AddStretchSpacer()
+            dot_bmp = wx.StaticBitmap(panel_k, bitmap=_make_dot_bitmap(DRAFT_DOT_COLORS["empty"]))
+            clear_row.Add(dot_bmp, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
+            save_btn = wx.Button(panel_k, label=t("btn_save_draft"), size=(-1, 28))
+            save_btn.Bind(wx.EVT_BUTTON, lambda e, mc=msg_ctrl, k=kind: self._on_save_draft(mc, k))
+            clear_row.Add(save_btn, 0, wx.RIGHT, 6)
             clear_btn = wx.Button(panel_k, label=t("clear"), size=(-1, 28))
-            clear_btn.Bind(wx.EVT_BUTTON, lambda e, mc=msg_ctrl: self._on_clear(mc))
+            clear_btn.Bind(wx.EVT_BUTTON, lambda e, mc=msg_ctrl, k=kind: self._on_clear(mc, k))
             clear_row.Add(clear_btn, 0)
             sizer_k.Add(clear_row, 0, wx.EXPAND)
 
             panel_k.SetSizer(sizer_k)
             self.msg_panels[kind] = panel_k
             self.msg_ctrls[kind] = msg_ctrl
+            self.dot_bitmaps[kind] = dot_bmp
             cs.Add(panel_k, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 14)
 
         self.add_bottom_buttons(t("btn_push_submit"))
         self.FinalizeLayout()
         self._update_msg_panels()
+        self._load_drafts()
+        self._intercept_close_buttons()
         wx.CallAfter(self._load_async)
+
+    def _load_drafts(self):
+        """Pre-fill commit message boxes with any previously saved draft for
+        that target's repo path (survives plugin/dialog close), and record
+        the baseline used to detect unsaved edits."""
+        for kind, ctrl in self.msg_ctrls.items():
+            path = self._kind_paths.get(kind)
+            draft = get_commit_draft(path) if path else ""
+            self._saved_values[kind] = draft
+            if draft:
+                ctrl.SetValue(draft)
+            self._update_dot(kind)
+
+    # ── Draft status dot ───────────────────────────────────────────────────
+
+    def _draft_state(self, kind):
+        current = self.msg_ctrls[kind].GetValue()
+        if not current.strip():
+            return "empty"
+        if current == self._saved_values.get(kind, ""):
+            return "saved"
+        return "unsaved"
+
+    def _update_dot(self, kind):
+        state = self._draft_state(kind)
+        self.dot_bitmaps[kind].SetBitmap(_make_dot_bitmap(DRAFT_DOT_COLORS[state]))
+
+    def _has_unsaved_drafts(self):
+        return any(self._draft_state(k) == "unsaved" for k in self.msg_ctrls)
+
+    def _save_all_drafts(self):
+        for kind, ctrl in self.msg_ctrls.items():
+            path = self._kind_paths.get(kind)
+            if not path:
+                continue
+            set_commit_draft(path, ctrl.GetValue())
+            self._saved_values[kind] = ctrl.GetValue()
+            self._update_dot(kind)
+
+    # ── Close interception (Back / Cancel / [X]) ──────────────────────────
+
+    def _intercept_close_buttons(self):
+        self.back_btn.Unbind(wx.EVT_BUTTON)
+        self.back_btn.Bind(wx.EVT_BUTTON, lambda e: self._attempt_close(ID_BACK))
+        cancel_btn = self.FindWindowById(wx.ID_CANCEL)
+        if cancel_btn:
+            cancel_btn.Bind(wx.EVT_BUTTON, lambda e: self._attempt_close(wx.ID_CANCEL))
+        self.Bind(wx.EVT_CLOSE, self._on_close_event)
+
+    def _ask_close_confirm(self):
+        """Returns 'back', 'save', or 'discard'."""
+        dlg = wx.MessageDialog(self, t("draft_close_confirm_msg"),
+                                f"{APPNAME} — {t('draft_close_confirm_title')}",
+                                wx.YES_NO | wx.CANCEL | wx.ICON_WARNING)
+        dlg.SetYesNoCancelLabels(t("btn_close_back"), t("btn_close_save"), t("btn_close_discard"))
+        result = dlg.ShowModal()
+        dlg.Destroy()
+        if result == wx.ID_YES:
+            return "back"
+        if result == wx.ID_NO:
+            return "save"
+        return "discard"
+
+    def _attempt_close(self, end_id):
+        if self._has_unsaved_drafts():
+            choice = self._ask_close_confirm()
+            if choice == "back":
+                return
+            if choice == "save":
+                self._save_all_drafts()
+        self.EndModal(end_id)
+
+    def _on_close_event(self, event):
+        if self._has_unsaved_drafts():
+            choice = self._ask_close_confirm()
+            if choice == "back":
+                event.Veto()
+                return
+            if choice == "save":
+                self._save_all_drafts()
+        self.EndModal(wx.ID_CANCEL)
 
     def _selected_targets(self):
         sel = self.target_radio.GetStringSelection()
@@ -103,7 +228,15 @@ class PushDialog(BaseGitDialog):
         msg_ctrl.SetInsertionPointEnd()
         msg_ctrl.SetFocus()
 
-    def _on_clear(self, msg_ctrl):
+    def _on_save_draft(self, msg_ctrl, kind):
+        path = self._kind_paths.get(kind)
+        if not path:
+            return
+        set_commit_draft(path, msg_ctrl.GetValue())
+        self._saved_values[kind] = msg_ctrl.GetValue()
+        self._update_dot(kind)
+
+    def _on_clear(self, msg_ctrl, kind):
         if not msg_ctrl.GetValue():
             return
         dlg = wx.MessageDialog(self, t("clear_confirm_msg"),
@@ -113,11 +246,18 @@ class PushDialog(BaseGitDialog):
         if dlg.ShowModal() == wx.ID_YES:
             msg_ctrl.SetValue("")
             msg_ctrl.SetFocus()
+            path = self._kind_paths.get(kind)
+            if path:
+                clear_commit_draft(path)
+                self._saved_values[kind] = ""
+            self._update_dot(kind)
         dlg.Destroy()
 
     def _load_async(self):
         path = self.project_path
         def worker():
+            if get_commit_draft(path):
+                return  # don't clobber a restored draft with the branch-name default
             branch = _run(["git", "branch", "--show-current"], path)
             b = branch.stdout.strip()
             if b and b not in ("main", "master", "develop"):
@@ -240,3 +380,4 @@ def _push_one(log, path, commit_msg):
         log(t("log_push_failed", err=r.stderr.strip()))
         return
     log(t("log_push_done"))
+    clear_commit_draft(path)
