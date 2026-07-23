@@ -88,6 +88,16 @@ def clear_commit_draft(repo_path):
         cfg["commit_drafts"] = drafts
         _save(cfg)
 
+def get_batch_root():
+    """Return the saved root folder for batch push/pull (contains many
+    independent project subfolders), or '' if not configured."""
+    return _load().get("batch_root", "")
+
+def set_batch_root(path):
+    cfg = dict(_load())
+    cfg["batch_root"] = path
+    _save(cfg)
+
 def get_config_snapshot():
     """Return a copy of the entire global config (for export)."""
     return dict(_load())
@@ -354,6 +364,36 @@ STRINGS = {
     "auto_update_layout_mismatch": {
         LANG_ZH: "在下載的檔案中找不到插件資料夾，可能是 repo 結構已變更。",
         LANG_EN: "Could not locate the plugin folder inside the downloaded archive — the repo layout may have changed."},
+
+    # Batch push/pull (settings page)
+    "settings_batch_box": {LANG_ZH: " 批次 Push / Pull（多專案資料夾） ", LANG_EN: " Batch Push / Pull (Multi-Project Folder) "},
+    "batch_hint": {
+        LANG_ZH: "指定一個存放多個電路專案的『大資料夾』，批次 Push/Pull 會掃描其中每個子資料夾，\n"
+                 "有 git 的才會執行，沒有 git 的自動跳過。",
+        LANG_EN: "Point to a parent folder containing many project subfolders. Batch push/pull scans\n"
+                 "each subfolder — folders without git are skipped automatically."},
+    "label_batch_root": {LANG_ZH: "根資料夾：", LANG_EN: "Root Folder:"},
+    "btn_batch_push": {LANG_ZH: "批次 Push ↑", LANG_EN: "Batch Push ↑"},
+    "btn_batch_pull": {LANG_ZH: "批次 Pull ↓", LANG_EN: "Batch Pull ↓"},
+    "batch_root_not_set": {LANG_ZH: "請先設定並保存根資料夾路徑。", LANG_EN: "Please set and save the root folder path first."},
+    "batch_root_invalid": {LANG_ZH: "根資料夾路徑不存在：{path}", LANG_EN: "Root folder does not exist: {path}"},
+    "batch_no_repos": {LANG_ZH: "在此資料夾底下沒有找到任何 git 專案。", LANG_EN: "No git projects found under this folder."},
+    "batch_confirm_title": {LANG_ZH: "確認批次操作", LANG_EN: "Confirm Batch Operation"},
+    "batch_push_confirm_msg": {
+        LANG_ZH: "即將掃描：\n{path}\n\n找到 {n} 個 git 專案：\n{names}\n\n每個專案將以自動 commit 訊息（如有變更）並推送到各自的遠端。\n\n是否繼續？",
+        LANG_EN: "About to scan:\n{path}\n\nFound {n} git project(s):\n{names}\n\nEach will be committed (if changed) with an automatic message and pushed to its remote.\n\nContinue?"},
+    "batch_pull_confirm_msg": {
+        LANG_ZH: "即將掃描：\n{path}\n\n找到 {n} 個 git 專案：\n{names}\n\n將依序對每個專案執行 Pull，若有衝突會逐一詢問處理方式。\n\n是否繼續？",
+        LANG_EN: "About to scan:\n{path}\n\nFound {n} git project(s):\n{names}\n\nEach will be pulled in order; conflicts will prompt you individually.\n\nContinue?"},
+    "subtitle_batch_push": {LANG_ZH: "批次 Git 推送", LANG_EN: "Batch Git Push"},
+    "subtitle_batch_pull": {LANG_ZH: "批次 Git 拉取", LANG_EN: "Batch Git Pull"},
+    "batch_auto_commit_msg": {LANG_ZH: "批次更新 {ts}", LANG_EN: "Batch update {ts}"},
+    "batch_skip_no_git":     {LANG_ZH: "⏭  跳過（非 git 專案）", LANG_EN: "⏭  Skipped (not a git project)"},
+    "batch_skip_clean":      {LANG_ZH: "⏭  跳過（無變更且無待推送 commit）", LANG_EN: "⏭  Skipped (no changes, nothing to push)"},
+    "batch_summary_title":   {LANG_ZH: "批次作業完成", LANG_EN: "Batch Operation Complete"},
+    "batch_apply_all_hint":  {LANG_ZH: "\n☑ 套用到全部剩餘專案", LANG_EN: "\n☑ Apply to all remaining projects"},
+    "btn_apply_all_overwrite": {LANG_ZH: "全部覆蓋本地", LANG_EN: "Overwrite All"},
+    "btn_apply_all_keep":      {LANG_ZH: "全部保留本地", LANG_EN: "Keep All Local"},
 }
 
 def t(key, **kwargs):

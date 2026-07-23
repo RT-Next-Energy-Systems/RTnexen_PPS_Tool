@@ -7,6 +7,7 @@ from .i18n import (
     t, get_language, set_language, get_global_remote2, set_global_remote2,
     get_global_remote2_url, set_global_remote2_url,
     get_config_snapshot, import_config_snapshot,
+    get_batch_root, set_batch_root,
     LANG_ZH, LANG_EN,
 )
 from .common import (
@@ -102,6 +103,35 @@ class SettingsDialog(wx.Dialog):
         branch_row.Add(self.branch_lbl, 0, wx.ALIGN_CENTER_VERTICAL)
         sizer.Add(branch_row, 0, wx.LEFT | wx.BOTTOM, 22)
 
+        # ── Batch Push/Pull (multi-project root folder) ──
+        batch_box = wx.StaticBox(panel, label=t("settings_batch_box"))
+        batch_s = wx.StaticBoxSizer(batch_box, wx.VERTICAL)
+
+        batch_hint = wx.StaticText(panel, label=t("batch_hint"))
+        batch_hint.SetForegroundColour(wx.Colour(140, 140, 140))
+        batch_s.Add(batch_hint, 0, wx.ALL, 8)
+
+        batch_row = wx.BoxSizer(wx.HORIZONTAL)
+        batch_row.Add(wx.StaticText(panel, label=t("label_batch_root")),
+                       0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
+        self.batch_root_ctrl = wx.TextCtrl(panel, value=get_batch_root())
+        batch_row.Add(self.batch_root_ctrl, 1, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
+        batch_browse_btn = wx.Button(panel, label=t("browse"), size=(70, -1))
+        batch_browse_btn.Bind(wx.EVT_BUTTON, self._on_batch_browse)
+        batch_row.Add(batch_browse_btn, 0)
+        batch_s.Add(batch_row, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+
+        batch_btn_row = wx.BoxSizer(wx.HORIZONTAL)
+        batch_push_btn = wx.Button(panel, label=t("btn_batch_push"))
+        batch_push_btn.Bind(wx.EVT_BUTTON, self._on_batch_push)
+        batch_btn_row.Add(batch_push_btn, 0, wx.RIGHT, 8)
+        batch_pull_btn = wx.Button(panel, label=t("btn_batch_pull"))
+        batch_pull_btn.Bind(wx.EVT_BUTTON, self._on_batch_pull)
+        batch_btn_row.Add(batch_pull_btn, 0)
+        batch_s.Add(batch_btn_row, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+
+        sizer.Add(batch_s, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+
         backup_box = wx.StaticBox(panel, label=t("settings_backup_box"))
         backup_s = wx.StaticBoxSizer(backup_box, wx.VERTICAL)
         backup_row = wx.BoxSizer(wx.HORIZONTAL)
@@ -175,6 +205,7 @@ class SettingsDialog(wx.Dialog):
             self.name2_ctrl.GetValue(),
             self.path2_ctrl.GetValue(),
             self.url2_ctrl.GetValue(),
+            self.batch_root_ctrl.GetValue(),
         )
 
     def _confirm_discard(self):
@@ -265,6 +296,72 @@ class SettingsDialog(wx.Dialog):
         if dlg.ShowModal() == wx.ID_OK:
             self.path2_ctrl.SetValue(dlg.GetPath())
         dlg.Destroy()
+
+    def _on_batch_browse(self, event):
+        dlg = wx.DirDialog(self, t("browse"),
+                            defaultPath=self.batch_root_ctrl.GetValue() or self.project_path)
+        if dlg.ShowModal() == wx.ID_OK:
+            self.batch_root_ctrl.SetValue(dlg.GetPath())
+        dlg.Destroy()
+
+    def _resolve_batch_repos(self):
+        """Validate the batch root folder and return its scanned repo list,
+        or None (after showing an appropriate message) if unusable."""
+        import os
+        from .batch_dialog import scan_batch_repos
+
+        root = self.batch_root_ctrl.GetValue().strip()
+        if not root:
+            wx.MessageBox(t("batch_root_not_set"), APPNAME, wx.OK | wx.ICON_WARNING)
+            return None
+        if not os.path.isdir(root):
+            wx.MessageBox(t("batch_root_invalid", path=root), APPNAME, wx.OK | wx.ICON_ERROR)
+            return None
+        if root != get_batch_root():
+            set_batch_root(root)
+            self._saved_snapshot = self._snapshot()
+
+        repos = scan_batch_repos(root)
+        if not repos:
+            wx.MessageBox(t("batch_no_repos"), APPNAME, wx.OK | wx.ICON_WARNING)
+            return None
+        return root, repos
+
+    def _on_batch_push(self, event):
+        resolved = self._resolve_batch_repos()
+        if not resolved:
+            return
+        root, repos = resolved
+        names = "\n".join(f"  • {r['name']}" for r in repos)
+        confirm = wx.MessageDialog(
+            self, t("batch_push_confirm_msg", path=root, n=len(repos), names=names),
+            f"{APPNAME} — {t('batch_confirm_title')}", wx.YES_NO | wx.ICON_WARNING)
+        confirm.SetYesNoLabels(t("ok"), t("cancel"))
+        proceed = confirm.ShowModal() == wx.ID_YES
+        confirm.Destroy()
+        if not proceed:
+            return
+
+        from .batch_dialog import run_batch_push
+        run_batch_push(root)
+
+    def _on_batch_pull(self, event):
+        resolved = self._resolve_batch_repos()
+        if not resolved:
+            return
+        root, repos = resolved
+        names = "\n".join(f"  • {r['name']}" for r in repos)
+        confirm = wx.MessageDialog(
+            self, t("batch_pull_confirm_msg", path=root, n=len(repos), names=names),
+            f"{APPNAME} — {t('batch_confirm_title')}", wx.YES_NO | wx.ICON_WARNING)
+        confirm.SetYesNoLabels(t("ok"), t("cancel"))
+        proceed = confirm.ShowModal() == wx.ID_YES
+        confirm.Destroy()
+        if not proceed:
+            return
+
+        from .batch_dialog import run_batch_pull
+        run_batch_pull(root)
 
     def _load_async(self):
         path = self.project_path
@@ -395,6 +492,11 @@ class SettingsDialog(wx.Dialog):
         new_lang = LANG_ZH if self.lang_radio.GetSelection() == 0 else LANG_EN
         if new_lang != get_language():
             set_language(new_lang)
+
+        # ── Batch root folder ──
+        batch_root = self.batch_root_ctrl.GetValue().strip()
+        if batch_root != get_batch_root():
+            set_batch_root(batch_root)
 
         # ── Remote 1 (this project) ──
         name1 = self.name1_ctrl.GetValue().strip()
