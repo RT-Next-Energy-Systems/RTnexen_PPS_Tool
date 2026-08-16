@@ -4,9 +4,10 @@ import glob
 import threading
 
 from .i18n import t, t_en, get_commit_draft, set_commit_draft, clear_commit_draft
-from .common import APPNAME, ID_BACK, _run, get_dialog_size, _build_target_choices, untrack_ignored_files
+from .common import APPNAME, ID_BACK, _run, get_dialog_size, _build_target_choices, untrack_ignored_files, ask_push_nff_dialog
 from .base_dialog import BaseGitDialog
 from .status_dialog import _make_dot_bitmap, STATUS_DOT_COLORS
+from .pull_dialog import _is_non_fast_forward
 
 # Draft-status dot colors reuse the same palette/logic as the Status tab:
 #   grey   — commit box empty
@@ -377,6 +378,39 @@ def _push_one(log, path, commit_msg):
     r = _run(args, path)
     if r.stdout.strip(): log(r.stdout.strip())
     if r.returncode != 0:
+        combined = (r.stdout.strip() + "\n" + r.stderr.strip()).strip()
+        if _is_non_fast_forward(combined):
+            log(t("log_push_non_ff"))
+            choice = ask_push_nff_dialog()
+            if choice == "pull_push":
+                log(t("log_rebase_before_push"))
+                rebase_args = ["git", "pull", "--rebase", "origin", branch] if branch else ["git", "pull", "--rebase"]
+                r_sync = _run(rebase_args, path)
+                if r_sync.returncode != 0:
+                    log(t("log_rebase_before_push_fail", err=(r_sync.stderr.strip() or r_sync.stdout.strip())))
+                    return
+                r2 = _run(args, path)
+                if r2.stdout.strip(): log(r2.stdout.strip())
+                if r2.returncode != 0:
+                    log(t("log_push_failed", err=r2.stderr.strip()))
+                    return
+                log(t("log_push_done"))
+                clear_commit_draft(path)
+                return
+            elif choice == "force":
+                log(t("log_force_pushing"))
+                force_args = ["git", "push", "--force-with-lease", "origin", branch] if branch else ["git", "push", "--force-with-lease"]
+                r_f = _run(force_args, path)
+                if r_f.stdout.strip(): log(r_f.stdout.strip())
+                if r_f.returncode != 0:
+                    log(t("log_force_push_failed", err=r_f.stderr.strip()))
+                    return
+                log(t("log_force_push_done"))
+                clear_commit_draft(path)
+                return
+            else:
+                log(t("log_push_skip_nff"))
+                return
         log(t("log_push_failed", err=r.stderr.strip()))
         return
     log(t("log_push_done"))

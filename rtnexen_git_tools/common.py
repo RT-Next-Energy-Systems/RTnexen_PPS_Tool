@@ -2,10 +2,11 @@ import wx
 import os
 import subprocess
 import platform
+import threading
 
 from .i18n import t, get_global_remote2
 
-VERSION = "3.4.0"
+VERSION = "3.4.1"
 APPNAME = "RTnexen PPS Tool"
 
 ID_BACK = wx.ID_HIGHEST + 100
@@ -91,6 +92,40 @@ def untrack_ignored_files(path):
     for f in files:
         _run(["git", "rm", "-r", "--cached", "--", f], path)
     return files
+
+# ── Push non-fast-forward dialog (shared by push_dialog & batch_dialog) ──────
+
+ID_FORCE_PUSH = wx.ID_HIGHEST + 101
+
+def ask_push_nff_dialog():
+    """Show Pull & Push / Force Push / Skip dialog from the UI thread.
+    Returns 'pull_push', 'force', or 'skip'."""
+    result = {"choice": "skip"}
+    done = threading.Event()
+
+    def _show():
+        dlg = wx.MessageDialog(
+            None,
+            t("push_nff_msg"),
+            f"{APPNAME} — {t('push_nff_title')}",
+            wx.YES_NO | wx.CANCEL | wx.ICON_WARNING)
+        dlg.SetYesNoCancelLabels(
+            t("btn_pull_then_push"),
+            t("btn_force_push"),
+            t("btn_skip_push"))
+        r = dlg.ShowModal()
+        dlg.Destroy()
+        if r == wx.ID_YES:
+            result["choice"] = "pull_push"
+        elif r == wx.ID_NO:
+            result["choice"] = "force"
+        else:
+            result["choice"] = "skip"
+        done.set()
+
+    wx.CallAfter(_show)
+    done.wait()
+    return result["choice"]
 
 # ── Target selector helper ──────────────────────────────────────────────────
 

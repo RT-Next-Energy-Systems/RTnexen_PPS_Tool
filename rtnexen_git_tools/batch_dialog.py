@@ -4,12 +4,13 @@ import threading
 from datetime import datetime
 
 from .i18n import t
-from .common import APPNAME, ID_BACK, _run, is_git_repo, get_dialog_size, untrack_ignored_files
+from .common import APPNAME, ID_BACK, _run, is_git_repo, get_dialog_size, untrack_ignored_files, ask_push_nff_dialog
 from .base_dialog import BaseGitDialog
 from .pull_dialog import (
     _get_branch, _ensure_upstream, _do_pull, _overwrite_local, _reset_to_remote,
     _is_non_fast_forward, _is_merge_conflict, _build_conflict_message,
 )
+
 from .push_dialog import _ensure_gitignore
 
 # ── Folder scanning ────────────────────────────────────────────────────────
@@ -212,6 +213,38 @@ def _batch_push_one(log, path, commit_msg):
     r = _run(args, path)
     if r.stdout.strip(): log(r.stdout.strip())
     if r.returncode != 0:
+        combined = (r.stdout.strip() + "\n" + r.stderr.strip()).strip()
+        if _is_non_fast_forward(combined):
+            log(t("log_push_non_ff"))
+            choice = ask_push_nff_dialog()
+            if choice == "pull_push":
+                log(t("log_rebase_before_push"))
+                rebase_args = ["git", "pull", "--rebase", "origin", branch_now] if branch_now else ["git", "pull", "--rebase"]
+                r_sync = _run(rebase_args, path)
+                if r_sync.returncode != 0:
+                    err = (r_sync.stderr.strip() or r_sync.stdout.strip())
+                    log(t("log_rebase_before_push_fail", err=err))
+                    return "failed"
+                r2 = _run(args, path)
+                if r2.stdout.strip(): log(r2.stdout.strip())
+                if r2.returncode != 0:
+                    log(t("log_push_failed", err=r2.stderr.strip()))
+                    return "failed"
+                log(t("log_push_done"))
+                return "ok"
+            elif choice == "force":
+                log(t("log_force_pushing"))
+                force_args = ["git", "push", "--force-with-lease", "origin", branch_now] if branch_now else ["git", "push", "--force-with-lease"]
+                r_f = _run(force_args, path)
+                if r_f.stdout.strip(): log(r_f.stdout.strip())
+                if r_f.returncode != 0:
+                    log(t("log_force_push_failed", err=r_f.stderr.strip()))
+                    return "failed"
+                log(t("log_force_push_done"))
+                return "ok"
+            else:
+                log(t("log_push_skip_nff"))
+                return "skipped"
         log(t("log_push_failed", err=r.stderr.strip()))
         return "failed"
     log(t("log_push_done"))
