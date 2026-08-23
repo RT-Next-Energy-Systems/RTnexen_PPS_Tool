@@ -4,7 +4,9 @@ import glob
 import threading
 
 from .i18n import t, t_en, get_commit_draft, set_commit_draft, clear_commit_draft
-from .common import APPNAME, ID_BACK, _run, get_dialog_size, _build_target_choices, untrack_ignored_files, ask_push_nff_dialog
+from .common import (APPNAME, ID_BACK, _run, get_dialog_size, _build_target_choices,
+                      untrack_ignored_files, ask_push_nff_dialog,
+                      _rebase_in_progress, ask_stuck_rebase_dialog)
 from .base_dialog import BaseGitDialog
 from .status_dialog import _make_dot_bitmap, STATUS_DOT_COLORS
 from .pull_dialog import _is_non_fast_forward
@@ -383,6 +385,16 @@ def _push_one(log, path, commit_msg):
             log(t("log_push_non_ff"))
             choice = ask_push_nff_dialog()
             if choice == "pull_push":
+                if _rebase_in_progress(path):
+                    log(t("log_stuck_rebase_detected"))
+                    if not ask_stuck_rebase_dialog():
+                        log(t("log_push_skip_nff"))
+                        return
+                    log(t("log_rebase_aborting_stale"))
+                    r_abort = _run(["git", "rebase", "--abort"], path)
+                    if r_abort.returncode != 0:
+                        log(t("log_rebase_abort_failed", err=(r_abort.stderr.strip() or r_abort.stdout.strip())))
+                        return
                 log(t("log_rebase_before_push"))
                 rebase_args = ["git", "pull", "--rebase", "origin", branch] if branch else ["git", "pull", "--rebase"]
                 r_sync = _run(rebase_args, path)

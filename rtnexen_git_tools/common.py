@@ -6,7 +6,7 @@ import threading
 
 from .i18n import t, get_global_remote2
 
-VERSION = "3.4.1"
+VERSION = "3.4.2"
 APPNAME = "RTnexen PPS Tool"
 
 ID_BACK = wx.ID_HIGHEST + 100
@@ -81,6 +81,48 @@ def center_on_screen(dlg):
         geo.x + (geo.width  - w) // 2,
         geo.y + (geo.height - h) // 2,
     ))
+
+def _rebase_in_progress(path):
+    """True if the repo at `path` has a leftover `.git/rebase-merge` or
+    `.git/rebase-apply` directory — i.e. a rebase (almost always this
+    plugin's own "Pull & Push" sync step, run via `git pull --rebase`) was
+    started but never finished (interrupted by a conflict, a crash, or the
+    dialog being closed mid-operation).
+
+    Git refuses to start a new rebase while one is already in progress. If
+    this isn't caught first, the next "Pull & Push" attempt fails immediately
+    with git's raw, unrecoverable-looking error ("It seems that there is
+    already a rebase-merge directory ..."), and the user has no way to
+    recover short of running git commands by hand outside the plugin."""
+    r = _run(["git", "rev-parse", "--git-dir"], path)
+    git_dir = r.stdout.strip() if r.returncode == 0 and r.stdout.strip() else ".git"
+    if not os.path.isabs(git_dir):
+        git_dir = os.path.join(path, git_dir)
+    return os.path.isdir(os.path.join(git_dir, "rebase-merge")) or \
+           os.path.isdir(os.path.join(git_dir, "rebase-apply"))
+
+def ask_stuck_rebase_dialog():
+    """Show a dialog from the UI thread when a leftover, unfinished rebase is
+    blocking the pull-before-push sync step. Returns True if the user wants
+    to abort the stale rebase and retry, False to skip this target instead."""
+    result = {"choice": False}
+    done = threading.Event()
+
+    def _show():
+        dlg = wx.MessageDialog(
+            None,
+            t("stuck_rebase_msg"),
+            f"{APPNAME} — {t('stuck_rebase_title')}",
+            wx.YES_NO | wx.ICON_WARNING)
+        dlg.SetYesNoLabels(t("btn_abort_rebase_retry"), t("cancel"))
+        r = dlg.ShowModal()
+        dlg.Destroy()
+        result["choice"] = (r == wx.ID_YES)
+        done.set()
+
+    wx.CallAfter(_show)
+    done.wait()
+    return result["choice"]
 
 def untrack_ignored_files(path):
     """Remove tracked files that now match .gitignore from the git index.
