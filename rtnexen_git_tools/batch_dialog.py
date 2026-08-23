@@ -4,7 +4,9 @@ import threading
 from datetime import datetime
 
 from .i18n import t
-from .common import APPNAME, ID_BACK, _run, is_git_repo, get_dialog_size, untrack_ignored_files, ask_push_nff_dialog
+from .common import (APPNAME, ID_BACK, _run, is_git_repo, get_dialog_size,
+                      untrack_ignored_files, ask_push_nff_dialog,
+                      _rebase_in_progress, ask_stuck_rebase_dialog)
 from .base_dialog import BaseGitDialog
 from .pull_dialog import (
     _get_branch, _ensure_upstream, _do_pull, _overwrite_local, _reset_to_remote,
@@ -218,6 +220,16 @@ def _batch_push_one(log, path, commit_msg):
             log(t("log_push_non_ff"))
             choice = ask_push_nff_dialog()
             if choice == "pull_push":
+                if _rebase_in_progress(path):
+                    log(t("log_stuck_rebase_detected"))
+                    if not ask_stuck_rebase_dialog():
+                        log(t("log_push_skip_nff"))
+                        return "skipped"
+                    log(t("log_rebase_aborting_stale"))
+                    r_abort = _run(["git", "rebase", "--abort"], path)
+                    if r_abort.returncode != 0:
+                        log(t("log_rebase_abort_failed", err=(r_abort.stderr.strip() or r_abort.stdout.strip())))
+                        return "failed"
                 log(t("log_rebase_before_push"))
                 rebase_args = ["git", "pull", "--rebase", "origin", branch_now] if branch_now else ["git", "pull", "--rebase"]
                 r_sync = _run(rebase_args, path)
