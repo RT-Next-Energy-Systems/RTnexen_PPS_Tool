@@ -40,14 +40,16 @@ if echo update | grep -qE "$F"; then
   PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')
   (cd $SRV && exec python3 -m http.server $PORT --bind 127.0.0.1 >/dev/null 2>&1) & SP=$!; sleep 1
   export PPS_UPDATE_PORT=$PORT
-  W=$WORK/update; rm -rf $W; mkdir -p $W/home; ${PYTHON:-python3} $S/mkproj.py $W/p; printf '[user]\nemail=t@t\nname=T\n' > $W/home/.gitconfig
-  $S/run_kicad.sh $PKG $W/home $W/p/a/board.kicad_pcb $S/k_update.py >/dev/null
-  echo "===== update"
-  verdict $W/home/result.json "'rtnexen_git_tools' in r['plugins_dir_entries'] and not [e for e in r['plugins_dir_entries'] if 'backup' in e] and len(r['backups_dir'])==1 and r['backups_dir'][0].startswith('rtnexen_git_tools_v') and shown_any('更新完成') and not shown_any('自動更新失敗')"
-  cp $W/home/result.json $W/home/result_update.json
-  $S/run_kicad_keep.sh $W/home $W/p/a/board.kicad_pcb $S/k_loadcheck.py
-  echo "===== update: KiCad restart"
-  verdict $W/home/result.json "r['load_errors']==[] and 'rtnexen_git_tools' in r['rtnexen_modules'] and not [l for l in r['not_loaded'] if 'rtnexen' in l]"
+  for MODE in auto manual; do
+    W=$WORK/update_$MODE; rm -rf $W; mkdir -p $W/home; ${PYTHON:-python3} $S/mkproj.py $W/p; printf '[user]\nemail=t@t\nname=T\n' > $W/home/.gitconfig
+    UPDATE_MODE=$MODE $S/run_kicad.sh $PKG $W/home $W/p/a/board.kicad_pcb $S/k_update.py >/dev/null
+    echo "===== update_$MODE"
+    verdict $W/home/result.json "r['steps']==(['UpdateDialog'] if r['mode']=='auto' else ['MainMenuDialog','SettingsDialog','UpdateDialog']) and 'rtnexen_git_tools' in r['plugins_dir_entries'] and not [e for e in r['plugins_dir_entries'] if 'backup' in e or e.startswith('.')] and len(r['backups_dir'])==1 and r['backups_dir'][0].startswith('rtnexen_git_tools_v') and shown_any('更新完成') and not shown_any('自動更新失敗')"
+    cp $W/home/result.json $W/home/result_update.json
+    $S/run_kicad_keep.sh $W/home $W/p/a/board.kicad_pcb $S/k_loadcheck.py
+    echo "===== update_${MODE}: KiCad restart"
+    verdict $W/home/result.json "r['load_errors']==[] and 'rtnexen_git_tools' in r['rtnexen_modules'] and not [l for l in r['not_loaded'] if 'rtnexen' in l]"
+  done
   kill $SP
 fi
 echo; echo "KiCad end-to-end: $PASSN PASS, $FAILN FAIL"; [ $FAILN -eq 0 ]
