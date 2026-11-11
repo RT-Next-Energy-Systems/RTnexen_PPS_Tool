@@ -224,7 +224,7 @@ def _batch_push_one(log, path, commit_msg):
         if r.stdout.strip(): log(r.stdout.strip())
 
         log(t("log_committing", msg=commit_msg))
-        r = _run(["git", "commit", "-m", commit_msg], path)
+        r = _run(["git", "commit", "-F", "-"], path, input=commit_msg)
         if r.stdout.strip(): log(r.stdout.strip())
         if r.returncode != 0:
             err = r.stderr.strip() or r.stdout.strip()

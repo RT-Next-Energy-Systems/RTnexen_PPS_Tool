@@ -1,6 +1,6 @@
 """Test harness: real wxPython (under Xvfb), stub pcbnew, scripted dialog answers."""
 import os, sys, types, tempfile, subprocess, threading, shutil
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.environ.get("PPS_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOME = tempfile.mkdtemp(prefix="ppshome_")
 os.environ["HOME"] = HOME
 os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
@@ -70,7 +70,7 @@ LOG = []
 def log(m): LOG.append(m)
 
 def sh(cmd, cwd):
-    r = subprocess.run(cmd, cwd=cwd, shell=True, text=True, capture_output=True)
+    r = subprocess.run(cmd, cwd=cwd, shell=True, capture_output=True, encoding="utf-8", errors="replace")
     return r
 
 def mkrepos():
@@ -86,4 +86,4 @@ def mkrepos():
     return base, a, b
 
 def git(cwd, *args):
-    return subprocess.run(["git", *args], cwd=cwd, text=True, capture_output=True).stdout.strip()
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, encoding="utf-8", errors="replace").stdout.strip()

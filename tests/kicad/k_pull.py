@@ -9,5 +9,6 @@ def main():
     b = open(os.path.join(A, "board.kicad_pcb"), encoding="utf-8").read()
     done(board_text=[t for t in ("TEAM", "MINE", "DIRTY", "ORIGINAL", "<<<<<<<") if t in b],
          status=git_out(A, "status", "--porcelain"), merging=os.path.exists(os.path.join(A, ".git", "MERGE_HEAD")),
-         head=git_out(A, "log", "-1", "--format=%s"))
+         head=git_out(A, "log", "-1", "--format=%s"), other_file=os.path.exists(os.path.join(A, "other.txt")),
+         parents=len(git_out(A, "log", "-1", "--format=%P").split()))
 wx.CallAfter(main)

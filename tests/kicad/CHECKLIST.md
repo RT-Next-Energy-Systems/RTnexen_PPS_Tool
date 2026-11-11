@@ -12,7 +12,7 @@
 | P8 | Push after Pull (stale board) | k_stale |
 | P9 | Push ALL targets (project + library) | k_settings |
 | L1 | Pull fast-forward | k_stale |
-| L2 | Pull diverged (merge) | k_pull_conflict / B01 |
+| L2 | Pull diverged, no conflict (auto merge) | k pull_merge, B01, B16 |
 | L3 | Pull conflict → Overwrite Local / Keep Local | k_pull_conflict |
 | L4 | Pull with uncommitted changes → Overwrite / Keep | k_pull_dirty |
 | S1 | Status (tabs, colors, back to menu) | k_status |
@@ -23,4 +23,6 @@
 | T6 | Update dialog: skip version / open page | E07 |
 | T5 | Settings: unsaved-changes prompt on Back | k_settings |
 | N1 | Board not in a git repo → warning | k_nogit |
-| G1 | git messages localized (zh_TW) | test_bugs (zh run) |
+| G1 | git messages localized (zh_TW) | test_bugs.py run with LANG=zh_TW.UTF-8 LANGUAGE=zh_TW |
+| G2 | Python on a legacy ANSI code page (BIG5 ≈ zh-TW Windows cp950) | test_ansi_codepage.py |
+| G3 | Static: undefined names, i18n placeholders vs. call sites | pyflakes + placeholder scan (see PR) |

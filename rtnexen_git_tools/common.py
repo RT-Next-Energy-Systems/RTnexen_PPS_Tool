@@ -13,7 +13,7 @@ ID_BACK = wx.ID_HIGHEST + 100
 
 # ── subprocess wrapper (no terminal flash on Windows) ─────────────────────────
 
-def _run(args, cwd):
+def _run(args, cwd, input=None):
     """Run a git command silently — no console window on Windows.
 
     - Output is always decoded as UTF-8 (what git emits). Relying on the
@@ -23,6 +23,9 @@ def _run(args, cwd):
     - core.quotepath=false so non-ASCII paths come out readable instead of
       as "\\346\\226..." octal escapes.
     - git's own messages are forced to English (see below).
+    - `input` (str) is sent on stdin as UTF-8 — used for commit messages so
+      their bytes are UTF-8 whatever the OS / locale code page (argv is
+      encoded with the locale's code page on Linux/macOS).
     - A missing git executable (or a vanished cwd) returns a failed result
       instead of raising, so callers' normal error handling applies."""
     args = list(args)
@@ -45,6 +48,8 @@ def _run(args, cwd):
         text=True,
         encoding="utf-8",
         errors="replace",
+        stdin=subprocess.DEVNULL if input is None else None,
+        input=input,
     )
     if platform.system() == "Windows":
         kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW

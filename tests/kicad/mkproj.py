@@ -22,6 +22,8 @@ if "teammate" in opts or "conflict" in opts:
 if "conflict" in opts:      # A also changed the same text and committed (not pushed)
     board_set(os.path.join(A, "board.kicad_pcb"), "MINE")
     sh("git commit -qam mine-change", A)
+if "otherfile" in opts:     # A committed a different file (diverged, no conflict)
+    sh("echo mine > other.txt && git add other.txt && git commit -qm mine-other", A)
 if "dirty" in opts:         # A has an uncommitted edit of the board
     board_set(os.path.join(A, "board.kicad_pcb"), "DIRTY")
 if "lib" in opts:

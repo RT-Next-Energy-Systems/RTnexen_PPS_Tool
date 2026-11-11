@@ -15,6 +15,15 @@ xvfb-run -a python3 tests/test_bugs.py
 tests/kicad/run_all.sh
 ```
 
+Each KiCad scenario checks its own expected result and prints PASS / FAIL (`VERBOSE=1` shows details).
+
+`test_ansi_codepage.py` runs the pull / status / push flows with Chinese commit messages while Python's
+locale encoding is a legacy ANSI code page (as inside KiCad on Traditional-Chinese Windows):
+
+```bash
+LANG=zh_TW.BIG5 PYTHONUTF8=0 xvfb-run -a python3 tests/test_ansi_codepage.py
+```
+
 Run `test_bugs.py` once more with a translated git (e.g. `LANG=zh_TW.UTF-8 LANGUAGE=zh_TW`, requires git's
 zh_TW `.mo` file and the locale) to check the localized-git handling.
 
