@@ -402,21 +402,19 @@ STRINGS = {
     "btn_auto_update": {LANG_ZH: "自動更新（下載並安裝）", LANG_EN: "Auto Update (Download & Install)"},
     "auto_update_confirm_title": {LANG_ZH: "確認自動更新", LANG_EN: "Confirm Auto Update"},
     "auto_update_confirm_msg": {
-        LANG_ZH: "即將從 GitHub 下載 {latest} 並覆蓋目前的插件檔案。\n\n目前版本會先備份到設定資料夾（~/.rtnexen_pps_tool/backups），若失敗可手動還原。\n\n更新完成後須關閉並重新啟動 KiCad 才會套用新版本。\n\n是否繼續？",
-        LANG_EN: "This will download {latest} from GitHub and overwrite the current plugin files.\n\nThe current version will be backed up to the settings folder (~/.rtnexen_pps_tool/backups) first; if anything fails you can restore it manually.\n\nYou must close and restart KiCad afterwards for the new version to take effect.\n\nContinue?"},
+        LANG_ZH: "即將從 GitHub 下載 {latest} 並覆蓋目前的插件檔案。\n\n目前版本會先備份到設定資料夾（~/.rtnexen_pps_tool/backups）；安裝若中途失敗，會保留目前版本，插件不會損壞。\n\n更新完成後須關閉並重新啟動 KiCad 才會套用新版本。\n\n是否繼續？",
+        LANG_EN: "This will download {latest} from GitHub and overwrite the current plugin files.\n\nThe current version will be backed up to the settings folder (~/.rtnexen_pps_tool/backups) first; if the install fails part-way, the current version is kept and the plugin is not damaged.\n\nYou must close and restart KiCad afterwards for the new version to take effect.\n\nContinue?"},
     "auto_update_downloading": {LANG_ZH: "正在下載並安裝更新...", LANG_EN: "Downloading and installing update..."},
-    "auto_update_rolled_back": {
-        LANG_ZH: "{err}\n\n（安裝中途失敗，已自動還原為目前版本，插件仍可正常使用。）",
-        LANG_EN: "{err}\n\n(Install failed part-way; the current version was restored automatically and still works.)"},
+    "auto_update_fail_unchanged": {
+        LANG_ZH: "自動更新失敗：{err}\n\n目前的插件沒有被更動，仍可正常使用。可稍後再試，或至 GitHub 頁面手動下載安裝。",
+        LANG_EN: "Auto update failed: {err}\n\nThe installed plugin was not changed and still works. Try again later, or download and install manually from GitHub."},
     "auto_update_restore_failed": {
-        LANG_ZH: "{err}\n\n自動還原也失敗：{err2}\n請將備份資料夾複製回 KiCad 插件資料夾：\n{backup}",
-        LANG_EN: "{err}\n\nAutomatic restore also failed: {err2}\nCopy the backup folder back into KiCad's plugin folder:\n{backup}"},
+        LANG_ZH: "自動更新失敗：{err}\n\n也無法自動還原：{err2}\n\n請手動還原：把備份資料夾\n{backup}\n複製到 KiCad 的插件資料夾，並把資料夾名稱改成「{name}」（取代原本的同名資料夾），然後重新啟動 KiCad。",
+        LANG_EN: "Auto update failed: {err}\n\nThe automatic restore also failed: {err2}\n\nRestore manually: copy the backup folder\n{backup}\ninto KiCad's plugin folder, rename it to \"{name}\" (replacing the folder of that name), then restart KiCad."},
+    "auto_update_more_errors": {LANG_ZH: "（另有 {n} 個檔案失敗）", LANG_EN: " (and {n} more files)"},
     "auto_update_success": {
         LANG_ZH: "更新完成！\n\n舊版本已備份至：\n{backup}\n\n請關閉並重新啟動 KiCad 以套用新版本。",
         LANG_EN: "Update complete!\n\nThe previous version was backed up to:\n{backup}\n\nPlease close and restart KiCad to use the new version."},
-    "auto_update_fail": {
-        LANG_ZH: "自動更新失敗：{err}\n\n請至 GitHub 頁面手動下載安裝。",
-        LANG_EN: "Auto update failed: {err}\n\nPlease download and install manually from GitHub."},
     "auto_update_layout_mismatch": {
         LANG_ZH: "在下載的檔案中找不到插件資料夾，可能是 repo 結構已變更。",
         LANG_EN: "Could not locate the plugin folder inside the downloaded archive — the repo layout may have changed."},

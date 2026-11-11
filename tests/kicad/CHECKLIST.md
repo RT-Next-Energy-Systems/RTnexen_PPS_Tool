@@ -26,7 +26,7 @@ Test ids: `kicad:<scenario>` = real KiCad pcbnew editor (tests/kicad/run_all.sh)
 | T1 | Settings: Remote 1 name/url (incl. git init), scope switch, save | kicad:settings unit:B12 |
 | T2 | Settings: export / import | kicad:settings unit:E06 |
 | T3 | Settings: batch push / batch pull | kicad:batch unit:B21 |
-| T4 | Settings: check update → auto update → KiCad restart; failed install rolls back | kicad:update kicad:update_restart unit:B13 unit:B27 |
+| T4 | Settings: check update → auto update → KiCad restart; failed install rolls back | kicad:update kicad:update_restart unit:B13 unit:B27 unit:B28 unit:B29 unit:B30 unit:B31 |
 | T5 | Settings: unsaved-changes prompt on Back | kicad:settings |
 | T6 | Update dialog: skip version / open page / version compare | unit:E07 |
 | N1 | Board not in a git repo → warning | kicad:nogit |

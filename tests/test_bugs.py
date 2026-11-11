@@ -404,33 +404,102 @@ def B26_unsaved_detection_ignores_identical_autosave():
     open(os.path.join(proj, "_autosave-top.kicad_sch"), "w").write("same")
     assert pd.check_unsaved_design_files(proj) == []
 
-@case
-def B27_auto_update_failure_mid_install_restores_plugin():
-    import tempfile, zipfile, io, shutil as _sh
+def _upd_fixture():
+    """Installed plugin (with sub-folders) in a fake KiCad plugins dir + a fake release zip."""
+    import tempfile, zipfile, io
     plugins = tempfile.mkdtemp(); inst = os.path.join(plugins, "rtnexen_git_tools")
-    os.makedirs(inst); open(os.path.join(inst, "__init__.py"), "w").write("#old"); open(os.path.join(inst, "a.py"), "w").write("old")
+    os.makedirs(os.path.join(inst, "icons")); os.makedirs(os.path.join(inst, "__pycache__"))
+    for f, c in (("__init__.py", "#old"), ("a.py", "old"), ("icons/x.png", "oldpng"), ("__pycache__/a.pyc", "pyc")):
+        open(os.path.join(inst, f), "w").write(c)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
-        z.writestr("R-9/rtnexen_git_tools/__init__.py", "#new"); z.writestr("R-9/rtnexen_git_tools/a.py", "new")
+        for f, c in (("__init__.py", "#new"), ("a.py", "new"), ("new_module.py", "new"), ("icons/x.png", "newpng")):
+            z.writestr("R-9/rtnexen_git_tools/" + f, c)
     class Resp:
         def __enter__(s): return s
         def __exit__(s, *a): pass
         def read(s): return buf.getvalue()
-    real = _sh.copytree
-    def failing(src, dst, *a, **k):          # install step dies half-way (disk full / locked file)
-        if dst == inst and "#new" in open(os.path.join(src, "__init__.py")).read():
-            os.makedirs(dst, exist_ok=True); open(os.path.join(dst, "a.py"), "w").write("half")
-            raise OSError(28, "No space left on device")
-        return real(src, dst, *a, **k)
-    saved = (uc.PLUGIN_DIR, uc.PLUGINS_PARENT, uc.urllib.request.urlopen, uc.shutil.copytree)
+    return plugins, inst, Resp
+
+def _snapshot_tree(d):
+    out = {}
+    for root, _, files in os.walk(d):
+        for f in files:
+            out[os.path.relpath(os.path.join(root, f), d)] = open(os.path.join(root, f)).read()
+    return out
+
+def _run_update(plugins, inst, Resp, copytree_fail=None, replace_fail=None):
+    """copytree_fail(src, dst) / replace_fail(src, dst) -> True to raise there."""
+    import shutil as _sh
+    real_ct, real_rp = _sh.copytree, os.replace
+    def ct(src, dst, *a, **k):
+        if copytree_fail and copytree_fail(str(src), str(dst)):
+            os.makedirs(dst, exist_ok=True); open(os.path.join(dst, "partial"), "w").write("x")
+            raise _sh.Error([(str(src) + "/f%d" % i, str(dst) + "/f%d" % i, "[Errno 28] No space left on device") for i in range(60)])
+        return real_ct(src, dst, *a, **k)
+    def rp(src, dst):
+        if replace_fail and replace_fail(str(src), str(dst)):
+            raise PermissionError(13, "The process cannot access the file because it is being used by another process")
+        return real_rp(src, dst)
+    saved = (uc.PLUGIN_DIR, uc.PLUGINS_PARENT, uc.urllib.request.urlopen)
     uc.PLUGIN_DIR, uc.PLUGINS_PARENT = inst, plugins
-    uc.urllib.request.urlopen = lambda *a, **k: Resp(); uc.shutil.copytree = failing
+    uc.urllib.request.urlopen = lambda *a, **k: Resp()
+    _sh.copytree, os.replace = ct, rp
     try:
-        ok, info = uc.download_and_install_update("v9")
+        return uc.download_and_install_update("v9")
     finally:
-        uc.PLUGIN_DIR, uc.PLUGINS_PARENT, uc.urllib.request.urlopen, uc.shutil.copytree = saved
-    assert not ok
-    content = {f: open(os.path.join(inst, f)).read() for f in sorted(os.listdir(inst))}
-    assert content == {"__init__.py": "#old", "a.py": "old"}, "plugin left broken: %s" % content
+        _sh.copytree, os.replace = real_ct, real_rp
+        uc.PLUGIN_DIR, uc.PLUGINS_PARENT, uc.urllib.request.urlopen = saved
+
+def _no_leftovers(plugins):
+    import glob as _g
+    left = [p for p in os.listdir(plugins) if p != "rtnexen_git_tools"]
+    left += _g.glob(os.path.join(HOME, ".rtnexen_pps_tool", "update_staging", "*")) + \
+            _g.glob(os.path.join(HOME, ".rtnexen_pps_tool", "update_staging", ".*"))
+    return left
+
+OLD_TREE = {"__init__.py": "#old", "a.py": "old", os.path.join("icons", "x.png"): "oldpng", os.path.join("__pycache__", "a.pyc"): "pyc"}
+
+@case
+def B27_update_fails_while_copying_new_version_plugin_untouched():
+    plugins, inst, Resp = _upd_fixture()
+    ok, msg = _run_update(plugins, inst, Resp, copytree_fail=lambda s, d: d.endswith("-new"))
+    assert not ok and _snapshot_tree(inst) == OLD_TREE, _snapshot_tree(inst)
+    assert _no_leftovers(plugins) == [], _no_leftovers(plugins)
+    assert len(msg) < 600 and "59" in msg, "error not summarised: %d chars" % len(msg)
+    assert "not changed" in msg
+
+@case
+def B28_update_locked_file_rename_fails_plugin_untouched():
+    plugins, inst, Resp = _upd_fixture()
+    ok, msg = _run_update(plugins, inst, Resp, replace_fail=lambda s, d: s == inst)
+    assert not ok and _snapshot_tree(inst) == OLD_TREE and _no_leftovers(plugins) == []
+    assert "not changed" in msg
+
+@case
+def B29_update_swap_fails_old_version_renamed_back():
+    plugins, inst, Resp = _upd_fixture()
+    ok, msg = _run_update(plugins, inst, Resp, replace_fail=lambda s, d: s.endswith("-new"))
+    assert not ok and _snapshot_tree(inst) == OLD_TREE, _snapshot_tree(inst)
+    assert _no_leftovers(plugins) == [], _no_leftovers(plugins)
+
+@case
+def B30_update_double_failure_tells_user_to_rename_backup():
+    plugins, inst, Resp = _upd_fixture()
+    ok, msg = _run_update(plugins, inst, Resp, replace_fail=lambda s, d: d == inst)
+    assert not ok and "rtnexen_git_tools" in msg and "rename" in msg, msg
+    import re as _re
+    backup = _re.search(r"\n(/\S+backups\S+)\n", msg).group(1)
+    assert _snapshot_tree(backup) == OLD_TREE, "backup named in the message is not the intact old version"
+
+@case
+def B31_update_success_and_retry_keep_every_backup():
+    plugins, inst, Resp = _upd_fixture()
+    ok1, b1 = _run_update(plugins, inst, Resp)
+    ok2, b2 = _run_update(plugins, inst, Resp)
+    assert ok1 and ok2 and b1 != b2 and os.path.isdir(b1) and os.path.isdir(b2), (b1, b2)
+    assert _snapshot_tree(b1) == OLD_TREE, "first (only good) backup was overwritten"
+    assert _snapshot_tree(inst) == {"__init__.py": "#new", "a.py": "new", "new_module.py": "new", os.path.join("icons", "x.png"): "newpng"}
+    assert _no_leftovers(plugins) == [], _no_leftovers(plugins)
 
 for k, v in RESULTS.items(): print(f"{k:55s} {v}")
