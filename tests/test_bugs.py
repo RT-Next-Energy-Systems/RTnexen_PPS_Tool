@@ -404,4 +404,33 @@ def B26_unsaved_detection_ignores_identical_autosave():
     open(os.path.join(proj, "_autosave-top.kicad_sch"), "w").write("same")
     assert pd.check_unsaved_design_files(proj) == []
 
+@case
+def B27_auto_update_failure_mid_install_restores_plugin():
+    import tempfile, zipfile, io, shutil as _sh
+    plugins = tempfile.mkdtemp(); inst = os.path.join(plugins, "rtnexen_git_tools")
+    os.makedirs(inst); open(os.path.join(inst, "__init__.py"), "w").write("#old"); open(os.path.join(inst, "a.py"), "w").write("old")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("R-9/rtnexen_git_tools/__init__.py", "#new"); z.writestr("R-9/rtnexen_git_tools/a.py", "new")
+    class Resp:
+        def __enter__(s): return s
+        def __exit__(s, *a): pass
+        def read(s): return buf.getvalue()
+    real = _sh.copytree
+    def failing(src, dst, *a, **k):          # install step dies half-way (disk full / locked file)
+        if dst == inst and "#new" in open(os.path.join(src, "__init__.py")).read():
+            os.makedirs(dst, exist_ok=True); open(os.path.join(dst, "a.py"), "w").write("half")
+            raise OSError(28, "No space left on device")
+        return real(src, dst, *a, **k)
+    saved = (uc.PLUGIN_DIR, uc.PLUGINS_PARENT, uc.urllib.request.urlopen, uc.shutil.copytree)
+    uc.PLUGIN_DIR, uc.PLUGINS_PARENT = inst, plugins
+    uc.urllib.request.urlopen = lambda *a, **k: Resp(); uc.shutil.copytree = failing
+    try:
+        ok, info = uc.download_and_install_update("v9")
+    finally:
+        uc.PLUGIN_DIR, uc.PLUGINS_PARENT, uc.urllib.request.urlopen, uc.shutil.copytree = saved
+    assert not ok
+    content = {f: open(os.path.join(inst, f)).read() for f in sorted(os.listdir(inst))}
+    assert content == {"__init__.py": "#old", "a.py": "old"}, "plugin left broken: %s" % content
+
 for k, v in RESULTS.items(): print(f"{k:55s} {v}")

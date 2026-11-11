@@ -119,8 +119,18 @@ def download_and_install_update(tag):
             shutil.rmtree(backup_dir)
         shutil.copytree(PLUGIN_DIR, backup_dir)
 
-        shutil.rmtree(PLUGIN_DIR)
-        shutil.copytree(src, PLUGIN_DIR)
+        try:
+            shutil.rmtree(PLUGIN_DIR)
+            shutil.copytree(src, PLUGIN_DIR)
+        except Exception as e:
+            # Never leave KiCad with a missing or half-copied plugin (disk full,
+            # a file locked by antivirus, ...): put the backed-up version back.
+            try:
+                shutil.rmtree(PLUGIN_DIR, ignore_errors=True)
+                shutil.copytree(backup_dir, PLUGIN_DIR, dirs_exist_ok=True)
+            except Exception as e2:
+                return False, t("auto_update_restore_failed", err=str(e), err2=str(e2), backup=backup_dir)
+            return False, t("auto_update_rolled_back", err=str(e))
         return True, backup_dir
     except Exception as e:
         return False, str(e)
