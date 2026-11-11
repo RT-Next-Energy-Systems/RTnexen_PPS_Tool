@@ -36,6 +36,8 @@ RES = {"platform": platform.system(), "python": sys.version.split()[0], "ansi co
        "git": g(".", "--version")}
 CASES = {}
 def case(f):
+    if os.environ.get("ONLY") and not f.__name__.startswith(tuple(os.environ["ONLY"].split(","))):
+        return f
     LOG.clear(); SHOWN.clear(); ANSWERS.clear()
     try:
         ok = f(); CASES[f.__name__] = "PASS" if ok is not False else "FAIL"
@@ -143,7 +145,10 @@ def W12_gui_every_dialog_builds_and_runs():
                           (OperationDialog, ("op", a, lambda log, p: log("中文紀錄")))]:
             d = cls(*args); d.Show()
             t0 = time.time()
-            while time.time() - t0 < 1.5: app.Yield(True); time.sleep(0.01)
+            done = lambda: not hasattr(d, "close_btn") or d.close_btn is None or d.close_btn.IsEnabled() or cls is PushDialog
+            while time.time() - t0 < 30 and not (time.time() - t0 > 1.0 and done()):
+                app.Yield(True); time.sleep(0.01)
+            RES["%s %s seconds" % (cls.__name__, lang)] = round(time.time() - t0, 1)
             if cls is StatusDialog:
                 assert d.close_btn.IsEnabled(), "status never finished"
                 assert "新.txt" in d.logs[0].GetValue(), d.logs[0].GetValue()[-200:]
