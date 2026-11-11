@@ -25,4 +25,5 @@
 | N1 | Board not in a git repo → warning | k_nogit |
 | G1 | git messages localized (zh_TW) | test_bugs.py run with LANG=zh_TW.UTF-8 LANGUAGE=zh_TW |
 | G2 | Python on a legacy ANSI code page (BIG5 ≈ zh-TW Windows cp950) | test_ansi_codepage.py |
+| G4 | Windows runtime: Windows Python 3.11 + Git for Windows, zh-TW locale (cp950) | test_windows_flows.py (run under Wine) |
 | G3 | Static: undefined names, i18n placeholders vs. call sites | pyflakes + placeholder scan (see PR) |
