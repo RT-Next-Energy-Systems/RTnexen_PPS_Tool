@@ -1,0 +1,44 @@
+# Manually triggered release: Actions → Release → Run workflow → tag (e.g. v3.5.0).
+# Creates the git tag on the chosen ref and publishes the GitHub Release, which
+# the plugin's built-in update checker reads (releases/latest).
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish, e.g. v3.5.0 — must equal 'v' + VERSION in rtnexen_git_tools/common.py"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches the plugin version
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          v=$(sed -n 's/^VERSION = "\(.*\)"$/\1/p' rtnexen_git_tools/common.py)
+          echo "plugin VERSION=$v, requested tag=$TAG"
+          if [ "v$v" != "$TAG" ]; then
+            echo "::error::Tag $TAG does not match VERSION $v in rtnexen_git_tools/common.py"
+            exit 1
+          fi
+
+      - name: Create tag and publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          notes=".github/release-notes/$TAG.md"
+          if [ -f "$notes" ]; then
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file "$notes"
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --generate-notes
+          fi
+          gh release view "$TAG"
