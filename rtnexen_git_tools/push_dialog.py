@@ -1,6 +1,8 @@
 import wx
 import os
 import glob
+import json
+import hashlib
 import threading
 
 from .i18n import t, t_en, get_commit_draft, set_commit_draft, clear_commit_draft
@@ -23,23 +25,83 @@ DRAFT_DOT_COLORS = {
 }
 
 # ── Unsaved design file detection ─────────────────────────────────────────────
-# KiCad writes a "_autosave-<filename>" backup file while a schematic/PCB
-# editor has unsaved changes in memory. If that autosave file is newer than
-# the real, saved file, the editor most likely still holds unsaved edits —
-# there is no direct API to query Eeschema's in-memory state from a pcbnew
-# ActionPlugin process, so this mtime comparison is the best available signal.
+# While a schematic/PCB editor holds unsaved edits, KiCad periodically writes
+# an autosave copy. If that copy is newer than the saved file AND differs from
+# it, the editor most likely still holds unsaved changes — there is no API to
+# query Eeschema's in-memory state from a pcbnew ActionPlugin, so this is the
+# best available signal. KiCad 10 keeps autosaves in one of two places
+# (Preferences > Common > Backups, kicad_common.json "auto_backup.location"):
+#   0 = project dir (default, also KiCad 7-9): "_autosave-<name>" next to the file
+#   1 = user dir: <settings>/autosave/<ProjectName>-<sha256(.kicad_pro path)[:12]>/
+#       mirroring the project tree, file names unchanged
+# (layout taken from KiCad 10.0.8 common/local_history.cpp + settings_manager.cpp).
+
+AUTOSAVE_PREFIX = "_autosave-"
+
+def _kicad_user_settings_dir():
+    try:
+        import pcbnew
+        return pcbnew.SETTINGS_MANAGER.GetUserSettingsPath() or ""
+    except Exception:
+        return ""
+
+def _user_dir_autosave_roots(project_path):
+    """Autosave roots for KiCad 10's "user directory" backup location, or []."""
+    settings = _kicad_user_settings_dir()
+    if not settings:
+        return []
+    try:
+        with open(os.path.join(settings, "kicad_common.json"), encoding="utf-8") as f:
+            location = json.load(f).get("auto_backup", {}).get("location", 0)
+    except (OSError, ValueError, AttributeError):
+        return []
+    if location != 1:
+        return []
+    roots = []
+    for pro in glob.glob(os.path.join(project_path, "*.kicad_pro")):
+        name = os.path.splitext(os.path.basename(pro))[0]
+        exact = os.path.join(settings, "autosave",
+                             "%s-%s" % (name, hashlib.sha256(pro.encode("utf-8")).hexdigest()[:12]))
+        if os.path.isdir(exact):
+            roots.append(exact)
+        else:   # path spelled differently than KiCad hashed it (case, separators...)
+            roots.extend(glob.glob(os.path.join(settings, "autosave", glob.escape(name) + "-*")))
+    return roots
+
+def _same_content(p1, p2):
+    try:
+        if os.path.getsize(p1) != os.path.getsize(p2):
+            return False
+        with open(p1, "rb") as a, open(p2, "rb") as b:
+            while True:
+                ca, cb = a.read(65536), b.read(65536)
+                if ca != cb:
+                    return False
+                if not ca:
+                    return True
+    except OSError:
+        return False
 
 def check_unsaved_design_files(project_path):
     """Return a list of project-relative filenames that look like they have
     unsaved changes in their editor (schematic and/or PCB). Searches
     recursively so hierarchical sub-sheets kept in subfolders are covered too."""
+    user_roots = _user_dir_autosave_roots(project_path)
     warnings = []
     for ext in ("kicad_sch", "kicad_pcb"):
         for real in glob.glob(os.path.join(project_path, "**", f"*.{ext}"), recursive=True):
             d, fname = os.path.split(real)
-            autosave = os.path.join(d, f"_autosave-{fname}")
-            if os.path.isfile(autosave) and os.path.getmtime(autosave) > os.path.getmtime(real):
-                warnings.append(os.path.relpath(real, project_path))
+            if fname.startswith(AUTOSAVE_PREFIX):
+                continue
+            rel = os.path.relpath(real, project_path)
+            candidates = [os.path.join(d, AUTOSAVE_PREFIX + fname)]
+            candidates += [os.path.join(r, rel) for r in user_roots]
+            for autosave in candidates:
+                if (os.path.isfile(autosave)
+                        and os.path.getmtime(autosave) > os.path.getmtime(real)
+                        and not _same_content(autosave, real)):
+                    warnings.append(rel)
+                    break
     return warnings
 
 # ── Push Form Dialog ──────────────────────────────────────────────────────────
