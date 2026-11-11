@@ -124,6 +124,35 @@ def W11_gui_push_dialog_overwrite_toggle():
     ok = d.GetOverwrite() and d.overwrite_hint.IsShown()
     d.Destroy(); return ok
 
+@case
+def W12_gui_every_dialog_builds_and_runs():
+    import time
+    from rtnexen_git_tools.main_menu_dialog import MainMenuDialog
+    from rtnexen_git_tools.status_dialog import StatusDialog
+    from rtnexen_git_tools.pull_dialog import PullDialog
+    from rtnexen_git_tools.push_dialog import PushDialog
+    from rtnexen_git_tools.settings_dialog import SettingsDialog
+    from rtnexen_git_tools.update_check import UpdateDialog
+    from rtnexen_git_tools.operation_dialog import OperationDialog
+    rem, a, b = repos()
+    write(os.path.join(a, "新.txt"), "x")
+    for lang in ("zh", "en"):
+        i18n.set_language(lang)
+        for cls, args in [(MainMenuDialog, (a,)), (StatusDialog, (a,)), (PullDialog, (a,)), (PushDialog, (a,)),
+                          (SettingsDialog, (a,)), (UpdateDialog, ("v10.0.0", "3.5.0", "readme")),
+                          (OperationDialog, ("op", a, lambda log, p: log("中文紀錄")))]:
+            d = cls(*args); d.Show()
+            t0 = time.time()
+            while time.time() - t0 < 1.5: app.Yield(True); time.sleep(0.01)
+            if cls is StatusDialog:
+                assert d.close_btn.IsEnabled(), "status never finished"
+                assert "新.txt" in d.logs[0].GetValue(), d.logs[0].GetValue()[-200:]
+            if cls is OperationDialog:
+                assert d.close_btn.IsEnabled() and "中文紀錄" in d.log.GetValue()
+            d.Destroy()
+    i18n.set_language("en")
+    return True
+
 RES.update(CASES)
 RES["RESULT"] = "%d/%d PASS" % (sum(v == "PASS" for v in CASES.values()), len(CASES))
 text = "\n".join("%-48s %s" % kv for kv in RES.items()) + "\n"
