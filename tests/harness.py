@@ -3,6 +3,7 @@ import os, sys, types, tempfile, subprocess, threading, shutil
 ROOT = os.environ.get("PPS_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOME = tempfile.mkdtemp(prefix="ppshome_")
 os.environ["HOME"] = HOME
+os.environ["USERPROFILE"] = HOME   # Windows: expanduser("~") reads USERPROFILE
 os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
 os.environ.pop("GIT_TERMINAL_PROMPT", None)
 for k in [k for k in os.environ if k.startswith("GIT_CONFIG_")]: os.environ.pop(k)

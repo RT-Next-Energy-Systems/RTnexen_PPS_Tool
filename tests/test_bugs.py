@@ -369,4 +369,39 @@ def E07_update_dialog_skip_and_open():
     assert opened == [uc.REPO_URL]
     assert uc._parse_version("v3.10.0") > uc._parse_version("3.9.9") and uc._parse_version("v3.5.0") == (3, 5, 0)
 
+@case
+def B25_unsaved_detection_kicad10_user_dir_autosave():
+    # KiCad 10: Preferences > Backups > "user directory" (kicad_common.json
+    # auto_backup.location = 1) mirrors autosaves under
+    # <settings>/autosave/<ProjectName>-<sha256(project file)[:12]>/ with NO "_autosave-" prefix.
+    import json, hashlib, tempfile, time
+    settings, proj = tempfile.mkdtemp(), tempfile.mkdtemp()
+    json.dump({"auto_backup": {"location": 1}}, open(os.path.join(settings, "kicad_common.json"), "w"))
+    pro = os.path.join(proj, "board.kicad_pro"); open(pro, "w").write("{}")
+    os.makedirs(os.path.join(proj, "sub"))
+    for f in ("top.kicad_sch", os.path.join("sub", "child.kicad_sch"), "board.kicad_pcb"):
+        open(os.path.join(proj, f), "w").write("saved")
+    root = os.path.join(settings, "autosave", "board-" + hashlib.sha256(pro.encode("utf-8")).hexdigest()[:12])
+    time.sleep(0.05)
+    os.makedirs(os.path.join(root, "sub"))
+    open(os.path.join(root, "sub", "child.kicad_sch"), "w").write("UNSAVED EDIT")   # newer + different
+    open(os.path.join(root, "board.kicad_pcb"), "w").write("saved")                  # newer but identical
+    orig = getattr(pd, "_kicad_user_settings_dir", None)
+    pd._kicad_user_settings_dir = lambda: settings
+    try:
+        found = pd.check_unsaved_design_files(proj)
+    finally:
+        if orig: pd._kicad_user_settings_dir = orig
+    assert found == [os.path.join("sub", "child.kicad_sch")], found
+
+@case
+def B26_unsaved_detection_ignores_identical_autosave():
+    # KiCad 10 itself treats a newer-but-byte-identical autosave (e.g. touched by a
+    # cloud-sync client) as NOT unsaved; don't block the push for it.
+    import tempfile, time
+    proj = tempfile.mkdtemp()
+    open(os.path.join(proj, "top.kicad_sch"), "w").write("same"); time.sleep(0.05)
+    open(os.path.join(proj, "_autosave-top.kicad_sch"), "w").write("same")
+    assert pd.check_unsaved_design_files(proj) == []
+
 for k, v in RESULTS.items(): print(f"{k:55s} {v}")

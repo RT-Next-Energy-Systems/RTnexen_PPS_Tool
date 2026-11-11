@@ -24,6 +24,18 @@ locale encoding is a legacy ANSI code page (as inside KiCad on Traditional-Chine
 LANG=zh_TW.BIG5 PYTHONUTF8=0 xvfb-run -a python3 tests/test_ansi_codepage.py
 ```
 
+`test_windows_flows.py` is a portable flow test (no shell syntax) for a **Windows** Python with a
+zh-TW locale: pull / status / push with Chinese messages and file names, auto-merge, conflict →
+Overwrite Local, Force Push, Pull & Push rollback, overwrite mode, untracking, missing git, GUI.
+Run it on Windows with any Python that has wxPython and git on PATH:
+
+```bash
+python tests/test_windows_flows.py
+```
+
+(Verified with Windows Python 3.11.10 + wxPython 4.2.2 + Git for Windows 2.47.1 under Wine with
+`LANG=zh_TW.UTF-8`, i.e. ANSI code page cp950: 11/11 on v3.5.0, 1/11 on v3.4.2.)
+
 Run `test_bugs.py` once more with a translated git (e.g. `LANG=zh_TW.UTF-8 LANGUAGE=zh_TW`, requires git's
 zh_TW `.mo` file and the locale) to check the localized-git handling.
 
