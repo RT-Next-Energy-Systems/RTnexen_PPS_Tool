@@ -7,7 +7,7 @@ from .i18n import t, t_en, get_commit_draft, set_commit_draft, clear_commit_draf
 from .common import (APPNAME, ID_BACK, _run, get_dialog_size, _build_target_choices,
                       untrack_ignored_files, ask_push_nff_dialog,
                       _rebase_in_progress, ask_stuck_rebase_dialog,
-                      pull_rebase_or_rollback)
+                      pull_rebase_or_rollback, force_push_fresh_lease)
 from .base_dialog import BaseGitDialog
 from .status_dialog import _make_dot_bitmap, STATUS_DOT_COLORS
 from .pull_dialog import _is_non_fast_forward
@@ -186,9 +186,12 @@ class PushDialog(BaseGitDialog):
     def _intercept_close_buttons(self):
         self.back_btn.Unbind(wx.EVT_BUTTON)
         self.back_btn.Bind(wx.EVT_BUTTON, lambda e: self._attempt_close(ID_BACK))
-        cancel_btn = self.FindWindowById(wx.ID_CANCEL)
-        if cancel_btn:
-            cancel_btn.Bind(wx.EVT_BUTTON, lambda e: self._attempt_close(wx.ID_CANCEL))
+        # Use our own button: wx.Window.FindWindowById is a STATIC lookup
+        # across all windows, and inside KiCad it returned the main menu's
+        # Cancel button (still alive behind this dialog), so the unsaved-draft
+        # prompt never fired on Cancel.
+        if self.cancel_btn:
+            self.cancel_btn.Bind(wx.EVT_BUTTON, lambda e: self._attempt_close(wx.ID_CANCEL))
         self.Bind(wx.EVT_CLOSE, self._on_close_event)
 
     def _ask_close_confirm(self):
@@ -390,27 +393,8 @@ def _overwrite_push(log, path, branch):
         log(t("log_overwrite_dirty", files=(st.stdout.strip() or st.stderr.strip())))
         return False
     log(t("log_overwrite_local_ok"))
-
-    log(t("log_overwrite_fetching"))
-    r_fetch = _run(["git", "fetch", "origin", branch], path)
-    if r_fetch.returncode != 0:
-        err = r_fetch.stderr.strip() or r_fetch.stdout.strip()
-        # A branch that doesn't exist on the remote yet is fine — nothing to overwrite.
-        if "couldn't find remote ref" not in err.lower():
-            log(t("log_overwrite_fetch_fail", err=err))
-            return False
-    else:
-        dropped = _run(["git", "log", "--oneline", f"HEAD..refs/remotes/origin/{branch}"], path)
-        if dropped.returncode == 0 and dropped.stdout.strip():
-            log(t("log_overwrite_will_drop", commits=dropped.stdout.strip()))
-
-    log(t("log_force_pushing"))
-    r_f = _run(["git", "push", "--force-with-lease", "origin", branch], path)
-    if r_f.stdout.strip(): log(r_f.stdout.strip())
-    if r_f.returncode != 0:
-        log(t("log_force_push_failed", err=r_f.stderr.strip()))
+    if not force_push_fresh_lease(log, path, branch):
         return False
-    log(t("log_force_push_done"))
     clear_commit_draft(path)
     return True
 
@@ -489,15 +473,8 @@ def _push_one(log, path, commit_msg, overwrite=False):
                 clear_commit_draft(path)
                 return
             elif choice == "force":
-                log(t("log_force_pushing"))
-                force_args = ["git", "push", "--force-with-lease", "origin", branch] if branch else ["git", "push", "--force-with-lease"]
-                r_f = _run(force_args, path)
-                if r_f.stdout.strip(): log(r_f.stdout.strip())
-                if r_f.returncode != 0:
-                    log(t("log_force_push_failed", err=r_f.stderr.strip()))
-                    return
-                log(t("log_force_push_done"))
-                clear_commit_draft(path)
+                if force_push_fresh_lease(log, path, branch):
+                    clear_commit_draft(path)
                 return
             else:
                 log(t("log_push_skip_nff"))

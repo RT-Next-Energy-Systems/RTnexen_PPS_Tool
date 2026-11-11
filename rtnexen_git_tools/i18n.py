@@ -342,7 +342,7 @@ STRINGS = {
     "log_pull_failed":        {LANG_ZH: "\n✗  Pull 失敗：\n{combined}", LANG_EN: "\n✗  Pull failed:\n{combined}"},
 
     "log_merge_abort":   {LANG_ZH: "▶ 正在中止未完成的合併 (git merge --abort) ...", LANG_EN: "▶ Aborting unfinished merge (git merge --abort) ..."},
-    "log_discard_local": {LANG_ZH: "▶ 正在捨棄本地變更 (git checkout -- .) ...", LANG_EN: "▶ Discarding local changes (git checkout -- .) ..."},
+    "log_discard_local": {LANG_ZH: "▶ 正在捨棄本地變更 (git reset --hard) ...", LANG_EN: "▶ Discarding local changes (git reset --hard) ..."},
     "log_discard_failed":{LANG_ZH: "\n✗  捨棄本地變更失敗：\n{err}", LANG_EN: "\n✗  Failed to discard local changes:\n{err}"},
 
     # Conflict dialogs
@@ -402,8 +402,8 @@ STRINGS = {
     "btn_auto_update": {LANG_ZH: "自動更新（下載並安裝）", LANG_EN: "Auto Update (Download & Install)"},
     "auto_update_confirm_title": {LANG_ZH: "確認自動更新", LANG_EN: "Confirm Auto Update"},
     "auto_update_confirm_msg": {
-        LANG_ZH: "即將從 GitHub 下載 v{latest} 並覆蓋目前的插件檔案。\n\n目前版本會先備份到設定資料夾（~/.rtnexen_pps_tool/backups），若失敗可手動還原。\n\n更新完成後須關閉並重新啟動 KiCad 才會套用新版本。\n\n是否繼續？",
-        LANG_EN: "This will download v{latest} from GitHub and overwrite the current plugin files.\n\nThe current version will be backed up to the settings folder (~/.rtnexen_pps_tool/backups) first; if anything fails you can restore it manually.\n\nYou must close and restart KiCad afterwards for the new version to take effect.\n\nContinue?"},
+        LANG_ZH: "即將從 GitHub 下載 {latest} 並覆蓋目前的插件檔案。\n\n目前版本會先備份到設定資料夾（~/.rtnexen_pps_tool/backups），若失敗可手動還原。\n\n更新完成後須關閉並重新啟動 KiCad 才會套用新版本。\n\n是否繼續？",
+        LANG_EN: "This will download {latest} from GitHub and overwrite the current plugin files.\n\nThe current version will be backed up to the settings folder (~/.rtnexen_pps_tool/backups) first; if anything fails you can restore it manually.\n\nYou must close and restart KiCad afterwards for the new version to take effect.\n\nContinue?"},
     "auto_update_downloading": {LANG_ZH: "正在下載並安裝更新...", LANG_EN: "Downloading and installing update..."},
     "auto_update_success": {
         LANG_ZH: "更新完成！\n\n舊版本已備份至：\n{backup}\n\n請關閉並重新啟動 KiCad 以套用新版本。",

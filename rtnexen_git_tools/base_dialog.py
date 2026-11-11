@@ -102,7 +102,9 @@ class BaseGitDialog(wx.Dialog):
         ok = wx.Button(self.panel, wx.ID_OK, ok_label, size=(120, 36))
         ok.SetDefault()
         row.Add(ok, 0, wx.RIGHT, 10)
+        self.cancel_btn = None
         if show_cancel:
-            row.Add(wx.Button(self.panel, wx.ID_CANCEL, t("cancel"), size=(90, 36)), 0)
+            self.cancel_btn = wx.Button(self.panel, wx.ID_CANCEL, t("cancel"), size=(90, 36))
+            row.Add(self.cancel_btn, 0)
         self.content_sizer.Add(row, 0, wx.EXPAND | wx.ALL, 12)
         return ok
