@@ -6,7 +6,7 @@ import hashlib
 import threading
 
 from .i18n import t, t_en, get_commit_draft, set_commit_draft, clear_commit_draft
-from .common import (APPNAME, ID_BACK, _run, get_dialog_size, _build_target_choices,
+from .common import (APPNAME, ID_BACK, _run, get_dialog_size, _build_target_choices, targets_for_choice,
                       untrack_ignored_files, ask_push_nff_dialog,
                       _rebase_in_progress, ask_stuck_rebase_dialog,
                       pull_rebase_or_rollback, force_push_fresh_lease)
@@ -290,10 +290,7 @@ class PushDialog(BaseGitDialog):
         self.EndModal(wx.ID_CANCEL)
 
     def _selected_targets(self):
-        sel = self.target_radio.GetStringSelection()
-        if sel == "ALL":
-            return list(self.targets)
-        return [cfg for cfg in self.targets if cfg["name"] == sel] or [self.targets[0]]
+        return targets_for_choice(self.targets, self.target_radio.GetSelection())
 
     def _on_target_change(self, event):
         self._refresh_status()

@@ -46,7 +46,7 @@ class BaseGitDialog(wx.Dialog):
         vlbl.SetForegroundColour(self.DIM)
         hs.Add(vlbl, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
 
-        sbtn = wx.Button(hdr, label="⚙", size=(32, 32))
+        sbtn = self.settings_btn = wx.Button(hdr, label="⚙", size=(32, 32))
         sbtn.SetToolTip(t("settings"))
         sbtn.Bind(wx.EVT_BUTTON, self._on_settings)
         hs.Add(sbtn, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)

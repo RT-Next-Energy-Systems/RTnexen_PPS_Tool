@@ -11,7 +11,7 @@ from .i18n import (
     LANG_ZH, LANG_EN,
 )
 from .common import (
-    VERSION, APPNAME, _run, is_git_repo, get_remote2_scope, get_remote2_config,
+    VERSION, APPNAME, _run, is_git_repo, is_repo_root, _same_path, get_remote2_scope, get_remote2_config,
     get_dialog_size, center_on_screen,
 )
 
@@ -230,8 +230,10 @@ class SettingsDialog(wx.Dialog):
             event.Veto()
 
     def _on_save(self, event):
-        self._apply(event)
-        self.EndModal(wx.ID_SAVE)
+        # Close only when everything was actually saved; otherwise keep the
+        # dialog (and what the user typed) open so it can be corrected.
+        if self._apply(event):
+            self.EndModal(wx.ID_SAVE)
 
     def _on_export_settings(self, event):
         ts = datetime.now().strftime("rt_ppst_%Y-%m_%d_%H_%M")
@@ -277,9 +279,14 @@ class SettingsDialog(wx.Dialog):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
-            # Don't restore machine-specific local path — it's different
-            # on every computer. URL and name are safe to import.
-            cfg.pop("remote2_path", None)
+            # Machine-specific entries (local folder paths, unsent commit
+            # drafts) are never taken from the file: keep THIS computer's own
+            # values — they used to be wiped, so the Remote 2 library vanished.
+            current = get_config_snapshot()
+            for key in ("remote2_path", "batch_root", "commit_drafts"):
+                cfg.pop(key, None)
+                if key in current:
+                    cfg[key] = current[key]
             import_config_snapshot(cfg)
         except (OSError, ValueError) as e:
             wx.MessageBox(t("import_settings_fail", err=str(e)), APPNAME, wx.OK | wx.ICON_ERROR)
@@ -485,7 +492,9 @@ class SettingsDialog(wx.Dialog):
         return result == wx.ID_YES
 
     def _apply(self, event):
+        """Save everything; returns True only if every part was saved."""
         results = []
+        ok = True
         path = self.project_path
 
         # ── Language ──
@@ -510,14 +519,14 @@ class SettingsDialog(wx.Dialog):
             if not is_git_repo(path):
                 ri = _run(["git", "init"], path)
                 if ri.returncode != 0:
-                    results.append(t("r1_git_init_fail", err=ri.stderr.strip()))
+                    results.append(t("r1_git_init_fail", err=ri.stderr.strip())); ok = False
                 else:
                     _run(["git", "branch", "-M", "main"], path)
                     ra = _run(["git", "remote", "add", "origin", url1], path)
                     if ra.returncode == 0:
                         results.append(t("r1_git_init_ok"))
                     else:
-                        results.append(t("r1_url_fail", err=ra.stderr.strip()))
+                        results.append(t("r1_url_fail", err=ra.stderr.strip())); ok = False
             else:
                 existing = _run(["git", "remote", "get-url", "origin"], path)
                 if existing.returncode == 0:
@@ -527,7 +536,7 @@ class SettingsDialog(wx.Dialog):
                 if r.returncode == 0:
                     results.append(t("r1_url_ok"))
                 else:
-                    results.append(t("r1_url_fail", err=r.stderr.strip()))
+                    results.append(t("r1_url_fail", err=r.stderr.strip())); ok = False
 
         # Saved AFTER the optional `git init` above: on a not-yet-git project
         # `git config` used to run first, fail silently, and lose the name.
@@ -567,13 +576,15 @@ class SettingsDialog(wx.Dialog):
                     _run(["git", "config", "--unset", "rtnexen.remote2path"], path)
                 results.append(t("r2_cleared"))
             else:
-                results.append(t("r2_global_change_cancelled"))
+                results.append(t("r2_global_change_cancelled")); ok = False
         elif not name2 or not path2:
-            results.append(t("r2_need_both"))
-        elif name2 == effective_name1:
-            results.append(t("r2_name_conflict", name=name2))
+            results.append(t("r2_need_both")); ok = False
+        elif name2 == effective_name1 or name2 == "ALL":
+            results.append(t("r2_name_conflict", name=name2)); ok = False
         elif not is_git_repo(path2):
-            results.append(t("r2_not_repo", path=path2))
+            results.append(t("r2_not_repo", path=path2)); ok = False
+        elif not is_repo_root(path2) or self._is_project_repo(path2):
+            results.append(t("r2_not_separate_repo", path=path2)); ok = False
         else:
             proceed = True
             if scope == "global":
@@ -601,10 +612,16 @@ class SettingsDialog(wx.Dialog):
                         if scope == "global":
                             set_global_remote2_url(url2)
                     else:
-                        results.append(t("r2_url_fail", err=r2.stderr.strip()))
+                        results.append(t("r2_url_fail", err=r2.stderr.strip())); ok = False
             else:
-                results.append(t("r2_global_change_cancelled"))
+                results.append(t("r2_global_change_cancelled")); ok = False
 
         wx.MessageBox("\n".join(results) if results else t("no_changes"),
-                       t("settings"), wx.OK | wx.ICON_INFORMATION)
-        self._saved_snapshot = self._snapshot()
+                       t("settings"), wx.OK | (wx.ICON_INFORMATION if ok else wx.ICON_WARNING))
+        if ok:
+            self._saved_snapshot = self._snapshot()
+        return ok
+
+    def _is_project_repo(self, path2):
+        top = _run(["git", "rev-parse", "--show-toplevel"], self.project_path).stdout.strip()
+        return bool(top) and _same_path(top, path2)

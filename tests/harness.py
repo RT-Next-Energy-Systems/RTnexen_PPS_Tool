@@ -30,6 +30,7 @@ app = wx.App(False)
 
 ANSWERS = []      # queue of return values for MessageDialog.ShowModal
 SHOWN = []        # (title, message) of every dialog / MessageBox shown
+UNEXPECTED = []   # dialogs shown with no scripted answer (answered Cancel)
 _RealMD = wx.MessageDialog
 class FakeMD:
     def __init__(self, parent, message, caption="", style=0, *a, **k):
@@ -39,7 +40,10 @@ class FakeMD:
     def ShowModal(self):
         SHOWN.append((self.caption, self.message))
         if not ANSWERS:
-            raise AssertionError("unexpected dialog: %s\n%s" % (self.caption, self.message))
+            # Never raise here: this runs via CallAfter while a worker thread
+            # waits for the answer, so an exception would hang the test forever.
+            UNEXPECTED.append(self.caption)
+            return wx.ID_CANCEL
         return ANSWERS.pop(0)
     def Destroy(self): pass
     def GetSize(self): return (10, 10)

@@ -61,7 +61,8 @@ def run_push(project_path):
     _push_fn._targets = targets
     _push_fn._overwrite = overwrite
     op = OperationDialog(t_en("subtitle_push"), project_path, _push_fn)
-    opres = op.ShowModal()
+    # "Pull & Push" (rebase) can rewrite the open .kicad_pcb on disk too.
+    opres = watch_open_board(op.ShowModal)
     op.Destroy()
     if opres == ID_BACK:
         run_main_dialog(project_path)
@@ -121,7 +122,16 @@ def run_status(project_path):
     if result == ID_BACK:
         run_main_dialog(project_path)
 
+_update_check_started = False
+
 def run_main_dialog(project_path):
+    # Background check for a newer release, once per KiCad session (honours
+    # "Skip this version"). It was implemented but never called before.
+    global _update_check_started
+    if not _update_check_started:
+        _update_check_started = True
+        from . import update_check
+        update_check.check_for_update_async(VERSION)
     dlg = MainMenuDialog(project_path)
     dlg.ShowModal()
     dlg.Destroy()

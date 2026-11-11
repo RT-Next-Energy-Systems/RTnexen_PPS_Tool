@@ -8,7 +8,7 @@ from .common import (APPNAME, ID_BACK, _run, is_git_repo, get_dialog_size,
                       untrack_ignored_files, ask_push_nff_dialog,
                       _rebase_in_progress, ask_stuck_rebase_dialog,
                       porcelain_lines, pull_rebase_or_rollback, watch_open_board,
-                      force_push_fresh_lease)
+                      force_push_fresh_lease, is_repo_root)
 from .base_dialog import BaseGitDialog
 from .pull_dialog import (
     _get_branch, _ensure_upstream, _do_pull, _discard_local_changes, _take_remote,
@@ -31,22 +31,9 @@ def scan_batch_repos(root_path):
         if entry.startswith("."):
             continue  # .git, .history, ... are never projects
         full = os.path.join(root_path, entry)
-        if os.path.isdir(full) and _is_repo_root(full):
+        if os.path.isdir(full) and is_repo_root(full):
             repos.append({"name": entry, "path": full})
     return repos
-
-def _is_repo_root(path):
-    """True only if `path` is the top level of its own repository. A plain
-    sub-folder of a repo also passes `is_git_repo` (it is "inside a work
-    tree"), so with a batch root that is itself a repo, every sub-folder used
-    to be treated as a project and the parent repo pushed/pulled N times."""
-    if not is_git_repo(path):
-        return False
-    r = _run(["git", "rev-parse", "--show-toplevel"], path)
-    if r.returncode != 0 or not r.stdout.strip():
-        return False
-    norm = lambda p: os.path.normcase(os.path.realpath(p))
-    return norm(r.stdout.strip()) == norm(path)
 
 # ── Batch conflict dialog (adds "apply to all remaining") ──────────────────
 
@@ -81,39 +68,40 @@ def _ask_batch_conflict_dialog(title, message, allow_apply_all):
 
 # ── Batch Pull ───────────────────────────────────────────────────────────────
 
-def _batch_pull_one(log, path, forced_choice):
-    """Pull a single repo. forced_choice is None (ask), wx.ID_YES (always
-    overwrite), or wx.ID_NO (always keep local / skip on conflict).
-    Returns (outcome, new_forced_choice) where outcome is "ok"/"skipped"/"failed"."""
+def _batch_pull_one(log, path, forced):
+    """Pull a single repo. `forced` maps a prompt kind ("uncommitted", "nonff",
+    "conflict") to the answer the user chose "for all remaining repos".
+
+    The kinds are kept apart on purpose: "overwrite all" chosen for UNCOMMITTED
+    changes must never also answer a MERGE-CONFLICT prompt — that one resets
+    to the remote and discards committed, unpushed work.
+    Returns (outcome, forced) where outcome is "ok"/"skipped"/"failed"."""
+    forced = dict(forced or {})
     branch = _get_branch(path)
+
+    def ask(kind, title, msg):
+        if kind in forced:
+            return forced[kind]
+        choice, apply_all = _ask_batch_conflict_dialog(title, msg, allow_apply_all=True)
+        if apply_all and choice in (wx.ID_YES, wx.ID_NO):
+            forced[kind] = choice
+        return choice
 
     log(t("log_checking_status"))
     st = _run(["git", "status", "--porcelain"], path)
     changed = porcelain_lines(st.stdout)
-    new_forced = None
     if changed:
         log(t("log_uncommitted"))
         for l in changed:
             log(f"   {l}")
-
-        if forced_choice is None:
-            msg = _build_conflict_message(
-                t("conflict_uncommitted_summary"),
-                files=[l[3:] for l in changed])
-            choice, apply_all = _ask_batch_conflict_dialog(
-                t("conflict_uncommitted_title"), msg, allow_apply_all=True)
-        else:
-            choice, apply_all = forced_choice, True
-
+        choice = ask("uncommitted", t("conflict_uncommitted_title"),
+                     _build_conflict_message(t("conflict_uncommitted_summary"), files=[l[3:] for l in changed]))
         if choice != wx.ID_YES:
             log(t("log_pull_cancel_keep"))
-            return "skipped", (wx.ID_NO if apply_all else None)
+            return "skipped", forced
         log("")
         if not _discard_local_changes(log, path):
-            return "failed", (wx.ID_YES if apply_all else None)
-        new_forced = wx.ID_YES if apply_all else None
-        if new_forced is not None:
-            forced_choice = new_forced
+            return "failed", forced
         # clean now — fall through to the normal pull
 
     _ensure_upstream(log, path, branch)
@@ -127,20 +115,12 @@ def _batch_pull_one(log, path, forced_choice):
     if r.returncode != 0:
         if _is_non_fast_forward(combined):
             log(t("log_non_ff", combined=combined))
-            if forced_choice is None:
-                msg = _build_conflict_message(t("conflict_nonff_summary"))
-                choice, apply_all = _ask_batch_conflict_dialog(
-                    t("conflict_nonff_title"), msg, allow_apply_all=True)
-            else:
-                choice, apply_all = forced_choice, True
-
+            choice = ask("nonff", t("conflict_nonff_title"), _build_conflict_message(t("conflict_nonff_summary")))
             if choice == wx.ID_YES:
                 log("")
-                ok = _reset_to_remote(log, path, branch)
-                return ("ok" if ok else "failed"), (wx.ID_YES if apply_all else None)
-            else:
-                log(t("log_pull_cancel_retry"))
-                return "skipped", (wx.ID_NO if apply_all else None)
+                return ("ok" if _reset_to_remote(log, path, branch) else "failed"), forced
+            log(t("log_pull_cancel_retry"))
+            return "skipped", forced
 
         if _is_merge_conflict(combined):
             conflicted = _run(["git", "diff", "--name-only", "--diff-filter=U"], path)
@@ -150,40 +130,30 @@ def _batch_pull_one(log, path, forced_choice):
                 log(t("log_conflict_files"))
                 for f in files:
                     log(f"  {f}")
-
-            if forced_choice is None:
-                msg = _build_conflict_message(t("conflict_merge_summary"), files=files)
-                choice, apply_all = _ask_batch_conflict_dialog(
-                    t("conflict_merge_title"), msg, allow_apply_all=True)
-            else:
-                choice, apply_all = forced_choice, True
-
+            choice = ask("conflict", t("conflict_merge_title"),
+                         _build_conflict_message(t("conflict_merge_summary"), files=files))
             if choice == wx.ID_YES:
                 log("")
-                ok = _take_remote(log, path, branch)
-                return ("ok" if ok else "failed"), (wx.ID_YES if apply_all else None)
-            else:
-                _abort_merge_if_any(log, path)
-                log(t("log_merge_conflict_cancel"))
-                return "skipped", (wx.ID_NO if apply_all else None)
+                return ("ok" if _take_remote(log, path, branch) else "failed"), forced
+            _abort_merge_if_any(log, path)
+            log(t("log_merge_conflict_cancel"))
+            return "skipped", forced
 
         log(t("log_pull_failed", combined=combined))
-        return "failed", new_forced
+        return "failed", forced
 
     if out:
         log(out)
     log(t("log_pull_done"))
-    return "ok", new_forced
+    return "ok", forced
 
 def _batch_pull_fn(log, root_path):
     repos = scan_batch_repos(root_path)
-    forced_choice = None  # None = ask each time; wx.ID_YES/ID_NO once "apply to all" chosen
+    forced = {}   # prompt kind -> answer the user chose "for all remaining repos"
     results = []
     for cfg in repos:
         log(f"\n══════ {cfg['name']} ══════")
-        outcome, new_forced = _batch_pull_one(log, cfg["path"], forced_choice)
-        if new_forced is not None:
-            forced_choice = new_forced
+        outcome, forced = _batch_pull_one(log, cfg["path"], forced)
         results.append((cfg["name"], outcome))
 
     log(f"\n\n══════ {t('batch_summary_title')} ══════")
@@ -292,7 +262,7 @@ def _batch_push_fn(log, root_path):
 def run_batch_push(root_path):
     from .operation_dialog import OperationDialog
     op = OperationDialog(t("subtitle_batch_push"), root_path, _batch_push_fn)
-    op.ShowModal()
+    watch_open_board(op.ShowModal)
     op.Destroy()
 
 def run_batch_pull(root_path):

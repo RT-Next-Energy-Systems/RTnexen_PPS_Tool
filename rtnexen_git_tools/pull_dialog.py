@@ -3,7 +3,7 @@ import threading
 
 from .i18n import t, t_en
 from .common import (APPNAME, _run, get_dialog_size, center_on_screen, _build_target_choices,
-                     porcelain_lines)
+                     porcelain_lines, targets_for_choice)
 from .base_dialog import BaseGitDialog
 
 # ── Pull Form Dialog ──────────────────────────────────────────────────────────
@@ -33,10 +33,7 @@ class PullDialog(BaseGitDialog):
         self.FinalizeLayout()
 
     def GetTargets(self):
-        sel = self.target_radio.GetStringSelection()
-        if sel == "ALL":
-            return list(self.targets)
-        return [cfg for cfg in self.targets if cfg["name"] == sel] or [self.targets[0]]
+        return targets_for_choice(self.targets, self.target_radio.GetSelection())
 
 # ── Pull conflict resolution ──────────────────────────────────────────────────
 

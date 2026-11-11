@@ -6,7 +6,7 @@ import threading
 
 from .i18n import t, get_global_remote2
 
-VERSION = "3.5.2"
+VERSION = "3.5.3"
 APPNAME = "RTnexen PPS Tool"
 
 ID_BACK = wx.ID_HIGHEST + 100
@@ -73,6 +73,22 @@ def is_git_repo(path):
     r = _run(["git", "rev-parse", "--is-inside-work-tree"], path)
     return r.returncode == 0
 
+def is_repo_root(path):
+    """True only if `path` is the top level of its own repository. A plain
+    sub-folder of a repo also passes `is_git_repo` (it is "inside a work
+    tree"); treating it as a separate repo makes "its" push commit the whole
+    enclosing repository."""
+    if not is_git_repo(path):
+        return False
+    r = _run(["git", "rev-parse", "--show-toplevel"], path)
+    if r.returncode != 0 or not r.stdout.strip():
+        return False
+    return _same_path(r.stdout.strip(), path)
+
+def _same_path(a, b):
+    norm = lambda p: os.path.normcase(os.path.realpath(p))
+    return norm(a) == norm(b)
+
 def get_remote2_scope(project_path):
     """Return 'global' or 'project' — where Remote 2's name/path are
     persisted. Defaults to 'global' unless explicitly set to 'project'.
@@ -103,8 +119,10 @@ def get_target_configs(project_path):
     configs = [{"name": name1 or t("default_remote1_name"), "path": project_path, "kind": "project"}]
 
     name2, path2 = get_remote2_config(project_path)
-    if name2 and path2 and is_git_repo(path2):
-        configs.append({"name": name2, "path": path2, "kind": "library"})
+    if name2 and path2 and is_repo_root(path2):
+        top = _run(["git", "rev-parse", "--show-toplevel"], project_path).stdout.strip()
+        if not (top and _same_path(top, path2)):      # not the project's own repo again
+            configs.append({"name": name2, "path": path2, "kind": "library"})
 
     return configs
 
@@ -319,6 +337,16 @@ def ask_push_nff_dialog():
     return result["choice"]
 
 # ── Target selector helper ──────────────────────────────────────────────────
+
+def targets_for_choice(configs, index):
+    """Targets for the radio button at `index` of the list built by
+    _build_target_choices: [ALL, cfg0, cfg1] with two targets, [cfg0] with one.
+    Matching by label text broke when Remote 2 was named "ALL" or shared a name."""
+    if len(configs) >= 2:
+        if index <= 0:
+            return list(configs)
+        return [configs[min(index - 1, len(configs) - 1)]]
+    return [configs[0]]
 
 def _build_target_choices(project_path):
     """Return (choices, configs) for the ALL / XXX / YYY radio selector.

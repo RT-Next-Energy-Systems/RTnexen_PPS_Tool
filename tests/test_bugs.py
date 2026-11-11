@@ -8,6 +8,7 @@ from rtnexen_git_tools import pull_dialog as pl, push_dialog as pd, status_dialo
 YES, NO, CANCEL = wx.ID_YES, wx.ID_NO, wx.ID_CANCEL
 RESULTS = {}
 def case(fn):
+    UNEXPECTED.clear()
     if os.environ.get("ONLY") and not fn.__name__.startswith(tuple(os.environ["ONLY"].split(","))): return fn
     LOG.clear(); SHOWN.clear(); ANSWERS.clear(); SAVED.clear()
     try:
@@ -501,5 +502,143 @@ def B31_update_success_and_retry_keep_every_backup():
     assert _snapshot_tree(b1) == OLD_TREE, "first (only good) backup was overwritten"
     assert _snapshot_tree(inst) == {"__init__.py": "#new", "a.py": "new", "new_module.py": "new", os.path.join("icons", "x.png"): "newpng"}
     assert _no_leftovers(plugins) == [], _no_leftovers(plugins)
+
+@case
+def B32_pull_and_push_rebase_marks_open_board_stale():
+    # review #1: "Pull & Push" rebases the teammate's PCB change onto disk; the
+    # editor still holds the old board, so the NEXT push must not save it over.
+    from rtnexen_git_tools import git_runner as gr
+    base, a, b = mkrepos()
+    BOARD["file"] = f = os.path.join(a, "board.kicad_pcb")
+    sh("printf 'L1\\nTEAM\\nL3\\n' > board.kicad_pcb && git commit -qam team && git push -q", b)
+    sh("echo n > notes.txt", a)
+    orig_save = pcb.SaveBoard
+    pcb.SaveBoard = lambda fn, brd: open(fn, "w").write("L1\nL2\nL3\n")   # editor still holds the pre-pull board
+    try:
+        _run_push_e2e(a, False, [YES])           # rejected -> Pull & Push (rebase rewrites board.kicad_pcb)
+        assert "TEAM" in open(f).read()
+        assert common.save_open_board() == "stale", "rebased board not marked stale"
+        assert "TEAM" in open(f).read()
+    finally:
+        BOARD["file"] = ""; pcb.SaveBoard = orig_save
+
+@case
+def B33_batch_apply_all_for_uncommitted_does_not_auto_reset_conflicts():
+    # review #2: "apply to all: overwrite" chosen for UNCOMMITTED changes must not
+    # silently answer a later MERGE-CONFLICT prompt with reset --hard.
+    base, a, b = mkrepos(); diverge(a, b, conflict=True)     # a: committed, unpushed, conflicting
+    sh("echo junk > scratch.kicad_prl && git add scratch.kicad_prl", a)   # plus an uncommitted change
+    ANSWERS[:] = [YES, YES,      # uncommitted prompt: Overwrite Local + "apply to all" confirm
+                  NO, NO]        # conflict prompt must still be ASKED: Keep Local, not for all
+    out, forced = run_worker(bd._batch_pull_one, log, a, None)
+    assert len(SHOWN) >= 3, "conflict prompt was skipped: " + str([c for c, m in SHOWN])
+    assert git(a, "log", "-1", "--format=%s") == "mine", "committed local work was reset away"
+
+@case
+def B34_operation_dialog_cannot_be_closed_while_running():
+    # review #3: [X] must not end the dialog while the git worker is still running.
+    import threading, time
+    from rtnexen_git_tools.operation_dialog import OperationDialog
+    gate = threading.Event()
+    d = OperationDialog("x", "/tmp", lambda log, p: gate.wait(10))
+    d.Show()
+    for _ in range(30): app.Yield(True); time.sleep(0.01)
+    vetoed = not d.Close()            # Close() returns False when EVT_CLOSE was vetoed
+    shown = d.IsShown()
+    gate.set()
+    for _ in range(50): app.Yield(True); time.sleep(0.01)
+    d.Destroy()
+    assert vetoed and shown, "dialog closed while the worker was running"
+
+@case
+def B35_remote2_named_ALL_selects_only_the_library():
+    # review #4: targets were picked by radio LABEL; a Remote 2 named "ALL" pushed both repos.
+    from rtnexen_git_tools.push_dialog import PushDialog
+    from rtnexen_git_tools.pull_dialog import PullDialog
+    base, a, b = mkrepos(); _, lib, _ = mkrepos()
+    sh(f"git config rtnexen.remote2scope project && git config rtnexen.remote2name ALL && git config rtnexen.remote2path {lib}", a)
+    picked = []
+    for cls in (PushDialog, PullDialog):
+        d = cls(a); d.target_radio.SetSelection(2)       # choices: ALL, 專案/Project, ALL(library)
+        picked.append([c["path"] for c in d.GetTargets()]); d.Destroy()
+    assert picked == [[lib], [lib]], picked
+
+@case
+def B36_import_settings_keeps_this_machines_remote2_path():
+    # review #5: importing (even your own backup) wiped this PC's Remote 2 path.
+    import json, tempfile
+    from rtnexen_git_tools.settings_dialog import SettingsDialog
+    base, a, b = mkrepos()
+    i18n.set_global_remote2("Lib", "/this/pc/lib")
+    f = os.path.join(tempfile.mkdtemp(), "exp.json")
+    json.dump({"language": "en", "remote2_name": "Lib", "remote2_path": "/other/pc/lib"}, open(f, "w"))
+    class FD:
+        def __init__(s, *a, **k): pass
+        def ShowModal(s): return wx.ID_OK
+        def GetPath(s): return f
+        def Destroy(s): pass
+    orig = wx.FileDialog; wx.FileDialog = FD
+    try:
+        d = SettingsDialog(a); ANSWERS[:] = [YES]; d._on_import_settings(None)
+        for _ in range(30): app.Yield(True)
+        d.Destroy()
+    finally:
+        wx.FileDialog = orig
+    i18n._cache = None
+    assert i18n.get_global_remote2() == ("Lib", "/this/pc/lib"), i18n.get_global_remote2()
+    i18n.set_global_remote2("", ""); i18n.set_language("en")
+
+@case
+def B37_status_shows_remote_has_new_commits():
+    # review #6: Status never fetched, so a clean tree behind the remote showed green.
+    base, a, b = mkrepos()
+    sh("echo t > t.txt && git add . && git commit -qm team && git push -q", b)
+    kind = sd._status_fn(log, a, "P")
+    assert kind != "clean", "green although the remote has a new commit"
+    assert any("behind" in l.lower() or "落後" in l for l in LOG), LOG
+
+@case
+def B38_settings_save_with_invalid_remote2_keeps_dialog_open():
+    # review #7: Save closed the dialog (losing the input) even when validation failed.
+    from rtnexen_git_tools.settings_dialog import SettingsDialog
+    base, a, b = mkrepos()
+    d = SettingsDialog(a)
+    for _ in range(50): app.Yield(True)
+    d.name2_ctrl.SetValue("Lib"); d.path2_ctrl.SetValue("/no/such/repo")
+    ended = []
+    d.EndModal = lambda code: ended.append(code)
+    d._on_save(None)
+    still = d.path2_ctrl.GetValue(); d.Destroy()
+    assert ended == [], "dialog closed although Remote 2 was rejected"
+    assert still == "/no/such/repo"
+
+@case
+def B39_update_check_runs_automatically_and_respects_skip():
+    # review #9: check_for_update_async was never called; "Skip this version" had no effect.
+    from rtnexen_git_tools import git_runner as gr, update_check as uc
+    calls = []
+    orig = uc.check_for_update_async
+    uc.check_for_update_async = lambda v: calls.append(v)
+    orig_md = gr.MainMenuDialog
+    class FakeMenu:
+        def __init__(s, p): pass
+        def ShowModal(s): return wx.ID_CANCEL
+        def Destroy(s): pass
+    gr.MainMenuDialog = FakeMenu
+    try:
+        gr.run_main_dialog("/tmp"); gr.run_main_dialog("/tmp")
+    finally:
+        uc.check_for_update_async = orig; gr.MainMenuDialog = orig_md
+    assert len(calls) == 1, "automatic update check calls: %r" % calls
+
+@case
+def B40_remote2_inside_project_repo_is_rejected():
+    # review #10: a plain sub-folder of the project repo was accepted as Remote 2, so the
+    # "library" push committed the whole project repo.
+    base, a, b = mkrepos()
+    os.makedirs(os.path.join(a, "lib"))
+    sh(f"git config rtnexen.remote2scope project && git config rtnexen.remote2name Lib && git config rtnexen.remote2path {os.path.join(a, 'lib')}", a)
+    names = [c["name"] for c in common.get_target_configs(a)]
+    assert names == [common.get_target_configs(a)[0]["name"]], names
 
 for k, v in RESULTS.items(): print(f"{k:55s} {v}")
