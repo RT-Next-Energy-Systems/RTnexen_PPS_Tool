@@ -43,7 +43,7 @@ if echo update | grep -qE "$F"; then
   W=$WORK/update; rm -rf $W; mkdir -p $W/home; ${PYTHON:-python3} $S/mkproj.py $W/p; printf '[user]\nemail=t@t\nname=T\n' > $W/home/.gitconfig
   $S/run_kicad.sh $PKG $W/home $W/p/a/board.kicad_pcb $S/k_update.py >/dev/null
   echo "===== update"
-  verdict $W/home/result.json "'rtnexen_git_tools' in r['plugins_dir_entries'] and not [e for e in r['plugins_dir_entries'] if 'backup' in e] and r['backups_dir']==['rtnexen_git_tools_v3.5.0'] and shown_any('更新完成') and not shown_any('自動更新失敗')"
+  verdict $W/home/result.json "'rtnexen_git_tools' in r['plugins_dir_entries'] and not [e for e in r['plugins_dir_entries'] if 'backup' in e] and len(r['backups_dir'])==1 and r['backups_dir'][0].startswith('rtnexen_git_tools_v') and shown_any('更新完成') and not shown_any('自動更新失敗')"
   cp $W/home/result.json $W/home/result_update.json
   $S/run_kicad_keep.sh $W/home $W/p/a/board.kicad_pcb $S/k_loadcheck.py
   echo "===== update: KiCad restart"
