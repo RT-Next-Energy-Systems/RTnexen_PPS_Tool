@@ -48,7 +48,7 @@ else:
     R["ansi"] = "SKIP (locale zh_TW.BIG5 missing: localedef -i zh_TW -f BIG5 zh_TW.BIG5)"
 
 print("running Windows flow test ...", flush=True)
-f = tempfile.mktemp(dir=HERE, suffix=".txt")
+f = tempfile.mktemp(prefix="pps_win_", suffix=".txt")   # outside the repo
 if args.win_cmd:
     winf = "Z:" + f.replace("/", "\\")
     o = xrun(args.win_cmd + ' "%s" 2>&1 | cat' % ("Z:" + os.path.join(HERE, "test_windows_flows.py").replace("/", "\\")), {"PPS_OUT": winf})
