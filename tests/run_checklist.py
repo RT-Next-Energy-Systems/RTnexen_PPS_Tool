@@ -13,7 +13,13 @@ ap.add_argument("--win-cmd", default=""); ap.add_argument("--python", default=sy
 args = ap.parse_args()
 R = {}          # test id -> "PASS" / "FAIL ..." / "SKIP ..."
 def xrun(cmd, env=None, timeout=3000):
-    e = dict(os.environ, **(env or {}))
+    e = dict(os.environ)
+    # Python started under the C locale coerces itself (PEP 538) by putting
+    # LC_CTYPE=C.UTF-8 into os.environ; inherited, that would override the
+    # LANG=zh_TW... we give child processes (Windows python then runs as cp1252).
+    for k in ("LC_ALL", "LC_CTYPE"):
+        e.pop(k, None)
+    e.update(env or {})
     return subprocess.run(cmd, cwd=ROOT, env=e, capture_output=True, timeout=timeout, encoding="utf-8", errors="replace", shell=isinstance(cmd, str))
 def parse(out, prefix):
     n = 0
@@ -33,7 +39,7 @@ else:
     R["unit-zh:ALL"] = "SKIP (no zh_TW git translation / locale installed)"
 
 print("running ANSI code page test ...", flush=True)
-if "zh_TW.big5" in xrun("locale -a").stdout.lower():
+if "zh_tw.big5" in xrun("locale -a").stdout.lower():
     f = tempfile.mktemp()
     xrun(["xvfb-run", "-a", args.python, "tests/test_ansi_codepage.py"], {"LANG": "zh_TW.BIG5", "PYTHONUTF8": "0", "PPS_OUT": f})
     t = open(f, encoding="utf-8").read() if os.path.exists(f) else ""
