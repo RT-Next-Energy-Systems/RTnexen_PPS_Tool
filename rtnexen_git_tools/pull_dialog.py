@@ -2,7 +2,8 @@ import wx
 import threading
 
 from .i18n import t, t_en
-from .common import APPNAME, _run, get_dialog_size, center_on_screen, _build_target_choices
+from .common import (APPNAME, _run, get_dialog_size, center_on_screen, _build_target_choices,
+                     porcelain_lines)
 from .base_dialog import BaseGitDialog
 
 # ── Pull Form Dialog ──────────────────────────────────────────────────────────
@@ -114,13 +115,18 @@ def _ensure_upstream(log, path, branch):
     return True
 
 def _do_pull(log, path, branch):
-    """Run pull with explicit remote/branch to avoid bare-pull failures."""
-    if branch:
-        return _run(["git", "pull", "origin", branch], path)
-    return _run(["git", "pull"], path)
+    """Run pull with explicit remote/branch to avoid bare-pull failures.
 
-def _overwrite_local(log, path, branch):
-    """Scenario A/C: discard local changes (abort merge if any) then re-pull."""
+    --no-rebase: since git 2.27 a plain `git pull` on diverged branches
+    refuses outright ("Need to specify how to reconcile divergent
+    branches") unless pull.rebase / pull.ff is configured, so the merge /
+    conflict handling below was unreachable on every modern install.
+    --no-edit: never open an editor for the merge commit (no console)."""
+    if branch:
+        return _run(["git", "pull", "--no-rebase", "--no-edit", "origin", branch], path)
+    return _run(["git", "pull", "--no-rebase", "--no-edit"], path)
+
+def _abort_merge_if_any(log, path):
     merge_head = _run(["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"], path)
     if merge_head.returncode == 0:
         log(t("log_merge_abort"))
@@ -128,26 +134,25 @@ def _overwrite_local(log, path, branch):
         if r.returncode != 0 and r.stderr.strip():
             log(f"   {r.stderr.strip()}")
 
+def _discard_local_changes(log, path):
+    """Scenario A "Overwrite Local": throw away uncommitted changes — staged
+    AND unstaged — so the pull can run on a clean tree. (`git checkout -- .`
+    only restored the work tree from the index, so staged edits survived and
+    the pull still failed.) Untracked files are left alone."""
+    _abort_merge_if_any(log, path)
     log(t("log_discard_local"))
-    r = _run(["git", "checkout", "--", "."], path)
+    r = _run(["git", "reset", "--hard", "HEAD"], path)
     if r.returncode != 0:
         log(t("log_discard_failed", err=r.stderr.strip()))
         return False
-
-    log(t("log_repulling"))
-    r = _do_pull(log, path, branch)
-    out = r.stdout.strip()
-    err = r.stderr.strip()
-    if r.returncode != 0:
-        log(t("log_pull_failed", combined=(out + "\n" + err).strip()))
-        return False
-
-    if out:
-        log(out)
-    log(t("log_pull_overwritten"))
-    if "Already up to date" not in out:
-        log(t("log_reload_hint"))
     return True
+
+def _take_remote(log, path, branch):
+    """Scenario C "Overwrite Local": abort the conflicted merge and make local
+    match the remote. (Re-pulling after the abort just hit the very same
+    conflict again, so this option could never succeed.)"""
+    _abort_merge_if_any(log, path)
+    return _reset_to_remote(log, path, branch)
 
 def _reset_to_remote(log, path, branch):
     """Scenario B: force-sync local to remote via fetch + reset --hard."""
@@ -173,8 +178,8 @@ def _pull_one(log, path):
     # ── Scenario A: uncommitted local changes ─────────────────────────────
     log(t("log_checking_status"))
     st = _run(["git", "status", "--porcelain"], path)
-    if st.stdout.strip():
-        changed = st.stdout.strip().splitlines()
+    changed = porcelain_lines(st.stdout)
+    if changed:
         log(t("log_uncommitted"))
         for l in changed:
             log(f"   {l}")
@@ -183,13 +188,14 @@ def _pull_one(log, path):
             t("conflict_uncommitted_summary"),
             files=[l[3:] for l in changed])
         choice = _ask_conflict_dialog(t("conflict_uncommitted_title"), msg)
-        if choice == wx.ID_YES:
-            log("")
-            _ensure_upstream(log, path, branch)
-            return _overwrite_local(log, path, branch)
-        else:
+        if choice != wx.ID_YES:
             log(t("log_pull_cancel_keep"))
             return False
+        log("")
+        if not _discard_local_changes(log, path):
+            return False
+        # Tree is clean now — continue with the normal pull below, which
+        # still handles a non-fast-forward / merge conflict properly.
 
     # ── Ensure upstream is set before pulling ────────────────────────────
     _ensure_upstream(log, path, branch)
@@ -226,8 +232,11 @@ def _pull_one(log, path):
             choice = _ask_conflict_dialog(t("conflict_merge_title"), msg)
             if choice == wx.ID_YES:
                 log("")
-                return _overwrite_local(log, path, branch)
+                return _take_remote(log, path, branch)
             else:
+                # Don't leave the repo mid-merge with conflict markers in
+                # the KiCad files — roll back to the pre-pull state.
+                _abort_merge_if_any(log, path)
                 log(t("log_merge_conflict_cancel"))
                 return False
 

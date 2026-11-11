@@ -43,4 +43,3 @@ For detailed installation instructions, please refer to the [Installation Wiki](
 MIT License — free to use, modify, and distribute.
 
 Copyright (c) 2026 RT Next-Energy Systems
->>>>>>> 7b46c2dbf6c168b2837526cbb45ff4353d9a0bfc

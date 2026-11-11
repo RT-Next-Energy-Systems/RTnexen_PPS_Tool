@@ -6,7 +6,8 @@ import threading
 from .i18n import t, t_en, get_commit_draft, set_commit_draft, clear_commit_draft
 from .common import (APPNAME, ID_BACK, _run, get_dialog_size, _build_target_choices,
                       untrack_ignored_files, ask_push_nff_dialog,
-                      _rebase_in_progress, ask_stuck_rebase_dialog)
+                      _rebase_in_progress, ask_stuck_rebase_dialog,
+                      pull_rebase_or_rollback)
 from .base_dialog import BaseGitDialog
 from .status_dialog import _make_dot_bitmap, STATUS_DOT_COLORS
 from .pull_dialog import _is_non_fast_forward
@@ -80,6 +81,7 @@ class PushDialog(BaseGitDialog):
         self.msg_ctrls = {}
         self.dot_bitmaps = {}
         self._saved_values = {}
+        self._autofill = {}
         for kind, label_key, presets in (("project", "commit_message_project", project_presets),
                                           ("library", "commit_message_library", library_presets)):
             panel_k = wx.Panel(p)
@@ -164,7 +166,11 @@ class PushDialog(BaseGitDialog):
         self.dot_bitmaps[kind].SetBitmap(_make_dot_bitmap(DRAFT_DOT_COLORS[state]))
 
     def _has_unsaved_drafts(self):
-        return any(self._draft_state(k) == "unsaved" for k in self.msg_ctrls)
+        # The auto-filled "Update <branch>" default isn't the user's work —
+        # don't nag about saving it when they just cancel.
+        return any(self._draft_state(k) == "unsaved"
+                   and self.msg_ctrls[k].GetValue() != self._autofill.get(k)
+                   for k in self.msg_ctrls)
 
     def _save_all_drafts(self):
         for kind, ctrl in self.msg_ctrls.items():
@@ -276,9 +282,13 @@ class PushDialog(BaseGitDialog):
             branch = _run(["git", "branch", "--show-current"], path)
             b = branch.stdout.strip()
             if b and b not in ("main", "master", "develop"):
-                wx.CallAfter(self.msg_ctrls["project"].SetValue, f"Update {b}")
+                wx.CallAfter(self._set_autofill, "project", f"Update {b}")
         threading.Thread(target=worker, daemon=True).start()
         self._refresh_status()
+
+    def _set_autofill(self, kind, text):
+        self._autofill[kind] = text
+        self.msg_ctrls[kind].SetValue(text)
 
     def _refresh_status(self):
         targets = self._selected_targets()
@@ -286,7 +296,7 @@ class PushDialog(BaseGitDialog):
             parts = []
             for cfg in targets:
                 st = _run(["git", "status", "--porcelain"], cfg["path"])
-                s = st.stdout.strip() or t("no_changes_push")
+                s = st.stdout.rstrip() or t("no_changes_push")
                 if len(targets) > 1:
                     parts.append(f"── {cfg['name']} ──\n{s}")
                 else:
@@ -468,10 +478,7 @@ def _push_one(log, path, commit_msg, overwrite=False):
                         log(t("log_rebase_abort_failed", err=(r_abort.stderr.strip() or r_abort.stdout.strip())))
                         return
                 log(t("log_rebase_before_push"))
-                rebase_args = ["git", "pull", "--rebase", "origin", branch] if branch else ["git", "pull", "--rebase"]
-                r_sync = _run(rebase_args, path)
-                if r_sync.returncode != 0:
-                    log(t("log_rebase_before_push_fail", err=(r_sync.stderr.strip() or r_sync.stdout.strip())))
+                if not pull_rebase_or_rollback(log, path, branch):
                     return
                 r2 = _run(args, path)
                 if r2.stdout.strip(): log(r2.stdout.strip())

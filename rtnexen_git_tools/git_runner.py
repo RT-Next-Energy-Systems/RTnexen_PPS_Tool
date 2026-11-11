@@ -1,7 +1,7 @@
 import wx
 
 from .i18n import t, t_en, set_commit_draft
-from .common import VERSION, APPNAME, ID_BACK
+from .common import VERSION, APPNAME, ID_BACK, save_open_board, watch_open_board
 
 from .main_menu_dialog import MainMenuDialog
 from .push_dialog import PushDialog, _push_fn, check_unsaved_design_files
@@ -39,16 +39,20 @@ def run_push(project_path):
 
     needed_kinds = set(cfg["kind"] for cfg in targets)
     if any(not messages.get(kind, "").strip() for kind in needed_kinds):
+        # Keep whatever the user did type (e.g. the project message when only
+        # the library one is empty) instead of silently discarding it.
+        for cfg in targets:
+            if messages.get(cfg["kind"], "").strip():
+                set_commit_draft(cfg["path"], messages[cfg["kind"]])
         wx.MessageBox(t("commit_msg_empty"), t("cancelled"),
                       wx.OK | wx.ICON_WARNING)
         return
 
-    try:
-        import pcbnew
-        board = pcbnew.GetBoard()
-        pcbnew.SaveBoard(board.GetFileName(), board)
-    except Exception:
-        pass
+    if save_open_board() == "stale":
+        # A Pull updated the open .kicad_pcb and the editor hasn't saved since:
+        # saving the in-memory (old) board would revert the pulled changes.
+        wx.MessageBox(t("stale_board_msg"), f"{APPNAME} — {t('stale_board_title')}",
+                      wx.OK | wx.ICON_WARNING)
 
     if overwrite and not _confirm_overwrite(targets, messages):
         return
@@ -105,7 +109,7 @@ def run_pull(project_path):
 
     _pull_all_fn._targets = targets
     op = OperationDialog(t_en("subtitle_pull"), project_path, _pull_all_fn)
-    opres = op.ShowModal()
+    opres = watch_open_board(op.ShowModal)
     op.Destroy()
     if opres == ID_BACK:
         run_main_dialog(project_path)

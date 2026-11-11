@@ -199,6 +199,7 @@ STRINGS = {
     # Settings apply results
     "r1_name_default": {LANG_ZH: "Remote 1：使用預設名稱（'{name}'）", LANG_EN: "Remote 1: using default name ('{name}')"},
     "r1_name_saved": {LANG_ZH: "Remote 1（'{name}'）：名稱已儲存", LANG_EN: "Remote 1 ('{name}'): name saved"},
+    "r1_name_fail":  {LANG_ZH: "Remote 1：名稱儲存失敗 - {err}", LANG_EN: "Remote 1: failed to save name - {err}"},
     "r1_git_init_ok":   {LANG_ZH: "已自動執行 git init 並設定 Remote 1 URL", LANG_EN: "git init completed and Remote 1 URL set"},
     "r1_git_init_fail": {LANG_ZH: "git init 失敗：{err}", LANG_EN: "git init failed: {err}"},
     "r1_url_ok":     {LANG_ZH: "Remote 1 URL：OK", LANG_EN: "Remote 1 URL: OK"},
@@ -284,8 +285,8 @@ STRINGS = {
     "log_commit_failed":      {LANG_ZH: "\n✗  提交失敗：{err}", LANG_EN: "\n✗  Commit failed: {err}"},
     "push_nff_title": {LANG_ZH: "推送被拒絕（Non-Fast-Forward）", LANG_EN: "Push Rejected (Non-Fast-Forward)"},
     "push_nff_msg":   {
-        LANG_ZH: "遠端有本地尚未同步的 commit，推送被拒絕。\n\n請選擇處理方式：\n• Pull 後 Push：先拉取遠端變更再推送\n• 跳過：略過此專案",
-        LANG_EN: "Remote has commits not present locally — push rejected.\n\nHow would you like to proceed?\n• Pull & Push: pull remote changes then push\n• Skip: leave this project for now",
+        LANG_ZH: "遠端有本地尚未同步的 commit，推送被拒絕。\n\n請選擇處理方式：\n• Pull 後 Push：先拉取遠端變更再推送\n• 強制 Push：以本地版本覆蓋遠端（遠端多出的 commit 會被移除）\n• 跳過：略過此專案",
+        LANG_EN: "Remote has commits not present locally — push rejected.\n\nHow would you like to proceed?\n• Pull & Push: pull remote changes then push\n• Force Push: overwrite the remote with your local version (extra remote commits are removed)\n• Skip: leave this project for now",
     },
     "btn_pull_then_push": {LANG_ZH: "Pull 後 Push",    LANG_EN: "Pull & Push"},
     "btn_force_push":     {LANG_ZH: "強制 Push（覆蓋遠端）", LANG_EN: "Force Push (overwrite remote)"},
@@ -305,6 +306,12 @@ STRINGS = {
     "btn_abort_rebase_retry":  {LANG_ZH: "中止並重試",  LANG_EN: "Abort & Retry"},
     "log_stuck_rebase_detected": {LANG_ZH: "⚠  偵測到上次同步遺留的未完成 rebase", LANG_EN: "⚠  Detected a leftover, unfinished rebase from a previous sync"},
     "log_rebase_aborting_stale": {LANG_ZH: "▶ 正在中止未完成的 rebase...", LANG_EN: "▶ Aborting the unfinished rebase..."},
+    "log_rebase_rolled_back":    {LANG_ZH: "↩  已自動還原同步（rebase --abort），本地 commit 保留不變，請先 Pull 解決衝突後再 Push。",
+                                  LANG_EN: "↩  Sync rolled back automatically (rebase --abort); your local commits are untouched. Pull and resolve the conflict, then push again."},
+    "stale_board_title": {LANG_ZH: "PCB 尚未重新載入", LANG_EN: "PCB Not Reloaded"},
+    "stale_board_msg": {
+        LANG_ZH: "目前開啟的 PCB 檔剛被 Pull 更新，但編輯器中仍是 Pull 之前的舊版本。\n\n為避免覆蓋 Pull 下來的內容，本次不會自動儲存 PCB（硬碟上的檔案已是最新版本）。\n\n請在 PCB 編輯器執行「檔案 → 復原（Revert）」重新載入；若之後有修改，請先按 Ctrl+S 儲存再 Push。",
+        LANG_EN: "The open PCB file was just updated by Pull, but the editor still holds the pre-pull version.\n\nTo avoid overwriting the pulled changes, the PCB will NOT be auto-saved this time (the file on disk is already the latest).\n\nReload it in the PCB editor via File → Revert; if you edit it afterwards, save with Ctrl+S before pushing."},
     "log_rebase_abort_failed":   {LANG_ZH: "\n✗  中止 rebase 失敗，請手動處理：{err}", LANG_EN: "\n✗  Failed to abort the rebase — please resolve manually: {err}"},
     "log_pushing":            {LANG_ZH: "▶ 正在推送到遠端...", LANG_EN: "▶ Pushing to remote..."},
     "log_push_failed":        {LANG_ZH: "\n✗  推送失敗：{err}", LANG_EN: "\n✗  Push failed: {err}"},
@@ -330,15 +337,13 @@ STRINGS = {
     "log_merge_conflict":     {LANG_ZH: "\n✗  Pull 後發生合併衝突 (merge conflict)\n{combined}",
                                 LANG_EN: "\n✗  Merge conflict occurred during pull\n{combined}"},
     "log_conflict_files":     {LANG_ZH: "衝突檔案：", LANG_EN: "Conflicted files:"},
-    "log_merge_conflict_cancel": {LANG_ZH: "\n✗  Pull 已取消，合併衝突尚未解決，請手動處理。",
-                                   LANG_EN: "\n✗  Pull cancelled — merge conflict unresolved, please resolve manually."},
+    "log_merge_conflict_cancel": {LANG_ZH: "\n✗  Pull 已取消，已還原至 Pull 前的狀態（本地 commit 保留）。",
+                                   LANG_EN: "\n✗  Pull cancelled — rolled back to the pre-pull state (local commits kept)."},
     "log_pull_failed":        {LANG_ZH: "\n✗  Pull 失敗：\n{combined}", LANG_EN: "\n✗  Pull failed:\n{combined}"},
 
     "log_merge_abort":   {LANG_ZH: "▶ 正在中止未完成的合併 (git merge --abort) ...", LANG_EN: "▶ Aborting unfinished merge (git merge --abort) ..."},
     "log_discard_local": {LANG_ZH: "▶ 正在捨棄本地變更 (git checkout -- .) ...", LANG_EN: "▶ Discarding local changes (git checkout -- .) ..."},
     "log_discard_failed":{LANG_ZH: "\n✗  捨棄本地變更失敗：\n{err}", LANG_EN: "\n✗  Failed to discard local changes:\n{err}"},
-    "log_repulling":     {LANG_ZH: "▶ 重新執行 git pull ...", LANG_EN: "▶ Re-running git pull ..."},
-    "log_pull_overwritten": {LANG_ZH: "\n✓  Pull 完成！（本地變更已被覆蓋）", LANG_EN: "\n✓  Pull complete! (local changes overwritten)"},
 
     # Conflict dialogs
     "conflict_uncommitted_title":   {LANG_ZH: "發現未提交的變更", LANG_EN: "Uncommitted Changes Found"},
@@ -397,8 +402,8 @@ STRINGS = {
     "btn_auto_update": {LANG_ZH: "自動更新（下載並安裝）", LANG_EN: "Auto Update (Download & Install)"},
     "auto_update_confirm_title": {LANG_ZH: "確認自動更新", LANG_EN: "Confirm Auto Update"},
     "auto_update_confirm_msg": {
-        LANG_ZH: "即將從 GitHub 下載 v{latest} 並覆蓋目前的插件檔案。\n\n目前版本會先備份到同層資料夾，若失敗可手動還原。\n\n更新完成後須關閉並重新啟動 KiCad 才會套用新版本。\n\n是否繼續？",
-        LANG_EN: "This will download v{latest} from GitHub and overwrite the current plugin files.\n\nThe current version will be backed up to a sibling folder first; if anything fails you can restore it manually.\n\nYou must close and restart KiCad afterwards for the new version to take effect.\n\nContinue?"},
+        LANG_ZH: "即將從 GitHub 下載 v{latest} 並覆蓋目前的插件檔案。\n\n目前版本會先備份到設定資料夾（~/.rtnexen_pps_tool/backups），若失敗可手動還原。\n\n更新完成後須關閉並重新啟動 KiCad 才會套用新版本。\n\n是否繼續？",
+        LANG_EN: "This will download v{latest} from GitHub and overwrite the current plugin files.\n\nThe current version will be backed up to the settings folder (~/.rtnexen_pps_tool/backups) first; if anything fails you can restore it manually.\n\nYou must close and restart KiCad afterwards for the new version to take effect.\n\nContinue?"},
     "auto_update_downloading": {LANG_ZH: "正在下載並安裝更新...", LANG_EN: "Downloading and installing update..."},
     "auto_update_success": {
         LANG_ZH: "更新完成！\n\n舊版本已備份至：\n{backup}\n\n請關閉並重新啟動 KiCad 以套用新版本。",

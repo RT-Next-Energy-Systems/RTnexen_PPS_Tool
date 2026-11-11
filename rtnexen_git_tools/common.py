@@ -14,16 +14,51 @@ ID_BACK = wx.ID_HIGHEST + 100
 # ── subprocess wrapper (no terminal flash on Windows) ─────────────────────────
 
 def _run(args, cwd):
-    """Run a git command silently — no console window on Windows."""
+    """Run a git command silently — no console window on Windows.
+
+    - Output is always decoded as UTF-8 (what git emits). Relying on the
+      locale default breaks on e.g. Traditional-Chinese Windows (cp950):
+      a Chinese commit message or file name raised UnicodeDecodeError and
+      killed the worker thread.
+    - core.quotepath=false so non-ASCII paths come out readable instead of
+      as "\\346\\226..." octal escapes.
+    - git's own messages are forced to English (see below).
+    - A missing git executable (or a vanished cwd) returns a failed result
+      instead of raising, so callers' normal error handling applies."""
+    args = list(args)
+    env = None
+    if args and args[0] == "git":
+        args = ["git", "-c", "core.quotepath=false"] + args[1:]
+        # Force untranslated (English) git messages: the plugin detects
+        # situations by matching git's text ("CONFLICT", "nothing to commit",
+        # "non-fast-forward", ...). With a localized git (e.g. zh_TW) none of
+        # those matched — a merge conflict was reported as a generic failure
+        # and "nothing to commit" aborted the push as "Commit failed".
+        env = dict(os.environ)
+        env.pop("LANGUAGE", None)
+        env["LC_ALL"] = "C"
     kwargs = dict(
         cwd=cwd,
+        env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     if platform.system() == "Windows":
         kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
-    return subprocess.run(args, **kwargs)
+    try:
+        return subprocess.run(args, **kwargs)
+    except OSError as e:
+        return subprocess.CompletedProcess(args, 127, "", str(e))
+
+def porcelain_lines(stdout):
+    """Split `git status --porcelain` output into lines WITHOUT stripping the
+    leading space of the status column (" M file"). Calling .strip() on the
+    whole output used to eat that space on the first line, so l[3:] then cut
+    the first character off the file name."""
+    return [l for l in stdout.splitlines() if l.strip()]
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -127,13 +162,89 @@ def ask_stuck_rebase_dialog():
 def untrack_ignored_files(path):
     """Remove tracked files that now match .gitignore from the git index.
     Returns list of paths that were untacked (empty list if none)."""
-    r = _run(["git", "ls-files", "--cached", "--ignored", "--exclude-standard"], path)
-    if r.returncode != 0 or not r.stdout.strip():
+    # -z: NUL-separated, never quoted — otherwise non-ASCII names come back
+    # quoted/escaped and the `git rm` below silently fails to match them.
+    r = _run(["git", "ls-files", "-z", "--cached", "--ignored", "--exclude-standard"], path)
+    if r.returncode != 0 or not r.stdout.strip("\0"):
         return []
-    files = r.stdout.strip().splitlines()
+    files = [f for f in r.stdout.split("\0") if f]
     for f in files:
         _run(["git", "rm", "-r", "--cached", "--", f], path)
     return files
+
+def pull_rebase_or_rollback(log, path, branch):
+    """`git pull --rebase` for the Pull & Push recovery. If it fails (usually
+    a conflict), abort the rebase right away instead of leaving the repo
+    mid-rebase: a detached HEAD with <<<<<<< markers inside .kicad_sch /
+    .kicad_pcb files that KiCad can no longer open. Returns True on success."""
+    args = ["git", "pull", "--rebase", "origin", branch] if branch else ["git", "pull", "--rebase"]
+    r = _run(args, path)
+    if r.returncode == 0:
+        return True
+    log(t("log_rebase_before_push_fail", err=(r.stderr.strip() or r.stdout.strip())))
+    if _rebase_in_progress(path):
+        ra = _run(["git", "rebase", "--abort"], path)
+        if ra.returncode == 0:
+            log(t("log_rebase_rolled_back"))
+        else:
+            log(t("log_rebase_abort_failed", err=(ra.stderr.strip() or ra.stdout.strip())))
+    return False
+
+# ── Open-board staleness tracking (Pull → Push in the same KiCad session) ────
+# run_push() saves the board currently open in pcbnew before committing. If a
+# Pull just rewrote that .kicad_pcb on disk, the editor still holds the OLD
+# board in memory, and saving it would silently revert the pulled changes
+# (and then commit + push the revert). We remember the file's signature right
+# after a pull changed it; while the file is still exactly that version, the
+# in-memory board is treated as stale and is not saved over it.
+
+_PULLED_BOARDS = {}
+
+def _file_sig(p):
+    try:
+        st = os.stat(p)
+        return (st.st_mtime_ns, st.st_size)
+    except (OSError, TypeError, ValueError):
+        return None
+
+def open_board_path():
+    try:
+        import pcbnew
+        return pcbnew.GetBoard().GetFileName() or ""
+    except Exception:
+        return ""
+
+def watch_open_board(fn):
+    """Run fn() (a pull); afterwards, if the open board file changed on disk,
+    mark it as stale in the editor."""
+    path = open_board_path()
+    before = _file_sig(path) if path else None
+    try:
+        return fn()
+    finally:
+        if path:
+            after = _file_sig(path)
+            if after is not None and after != before:
+                _PULLED_BOARDS[path] = after
+
+def save_open_board():
+    """Save the board open in pcbnew. Returns "saved", "stale" (skipped: a
+    pull updated the file and the editor hasn't saved since — saving now
+    would overwrite the pulled version), or "none" (no board / save failed)."""
+    path = open_board_path()
+    if not path:
+        return "none"
+    marked = _PULLED_BOARDS.get(path)
+    if marked is not None:
+        if marked == _file_sig(path):
+            return "stale"
+        del _PULLED_BOARDS[path]  # saved from KiCad since the pull — fine again
+    try:
+        import pcbnew
+        pcbnew.SaveBoard(path, pcbnew.GetBoard())
+        return "saved"
+    except Exception:
+        return "none"
 
 # ── Push non-fast-forward dialog (shared by push_dialog & batch_dialog) ──────
 

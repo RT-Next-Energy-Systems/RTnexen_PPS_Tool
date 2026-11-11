@@ -9,7 +9,7 @@ import zipfile
 
 import wx
 
-from .i18n import t, get_skipped_version, set_skipped_version
+from .i18n import t, get_skipped_version, set_skipped_version, CONFIG_DIR
 from .common import VERSION
 
 APPNAME = "RTnexen PPS Tool"
@@ -109,7 +109,12 @@ def download_and_install_update(tag):
         if not src:
             return False, t("auto_update_layout_mismatch")
 
-        backup_dir = os.path.join(PLUGINS_PARENT, f"{PLUGIN_PKG_NAME}_backup_v{VERSION}")
+        # Keep the backup OUT of KiCad's plugins folder: KiCad imports every
+        # sub-folder there that has an __init__.py, so a backup next to the
+        # plugin was loaded as a second (broken — the dotted name can't be
+        # imported) plugin on every KiCad start.
+        backup_dir = os.path.join(CONFIG_DIR, "backups", f"{PLUGIN_PKG_NAME}_v{VERSION}")
+        os.makedirs(os.path.dirname(backup_dir), exist_ok=True)
         if os.path.isdir(backup_dir):
             shutil.rmtree(backup_dir)
         shutil.copytree(PLUGIN_DIR, backup_dir)

@@ -503,11 +503,8 @@ class SettingsDialog(wx.Dialog):
         url1 = self.url1_ctrl.GetValue().strip()
         effective_name1 = name1 or t("default_remote1_name")
 
-        if not name1:
-            results.append(t("r1_name_default", name=effective_name1))
-        else:
-            _run(["git", "config", "rtnexen.remote1name", name1], path)
-            results.append(t("r1_name_saved", name=name1))
+        if url1 == t("loading"):
+            url1 = ""  # async load not finished yet — never save the placeholder
 
         if url1:
             if not is_git_repo(path):
@@ -531,6 +528,17 @@ class SettingsDialog(wx.Dialog):
                     results.append(t("r1_url_ok"))
                 else:
                     results.append(t("r1_url_fail", err=r.stderr.strip()))
+
+        # Saved AFTER the optional `git init` above: on a not-yet-git project
+        # `git config` used to run first, fail silently, and lose the name.
+        if not name1:
+            results.append(t("r1_name_default", name=effective_name1))
+        else:
+            rn = _run(["git", "config", "rtnexen.remote1name", name1], path)
+            if rn.returncode == 0:
+                results.append(t("r1_name_saved", name=name1))
+            else:
+                results.append(t("r1_name_fail", err=(rn.stderr.strip() or rn.stdout.strip())))
 
         # ── Remote 2 (independent repo) ──
         # Note: rtnexen.remote2scope is only written when a save/clear is
