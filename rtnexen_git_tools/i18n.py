@@ -223,6 +223,27 @@ STRINGS = {
     "btn_push_submit": {LANG_ZH: "推送 ↑", LANG_EN: "Push ↑"},
     "btn_pull_submit": {LANG_ZH: "拉取 ↓", LANG_EN: "Pull ↓"},
     "btn_save_draft": {LANG_ZH: "保存草稿", LANG_EN: "Save Draft"},
+    "overwrite_after_commit": {LANG_ZH: "Commit 後覆蓋遠端（強制 Push）", LANG_EN: "Overwrite remote after commit (Force Push)"},
+    "overwrite_after_commit_hint": {
+        LANG_ZH: "⚠  將以本地版本取代遠端，遠端上本地沒有的 commit 會被移除。執行前會強制檢查本地檔案皆已儲存且全部提交。",
+        LANG_EN: "⚠  Remote will be replaced by your local version; remote commits not present locally will be removed. Local files are strictly checked to be saved and fully committed first."},
+    "overwrite_unsaved_title": {LANG_ZH: "無法覆蓋：本地檔案不是最新", LANG_EN: "Cannot Overwrite: Local Files Not Up To Date"},
+    "overwrite_unsaved_msg": {
+        LANG_ZH: "覆蓋遠端前必須確保本地檔案為最新，但以下檔案在編輯器中仍有未儲存的變更：\n\n{files}\n\n請先在原理圖/PCB 編輯器內按 Ctrl+S 儲存，再重新執行 Push。\n（Commit 訊息已自動保存為草稿）",
+        LANG_EN: "Local files must be up to date before overwriting the remote, but these files still have unsaved changes in their editor:\n\n{files}\n\nSave with Ctrl+S in the Schematic/PCB editor, then run Push again.\n(Your commit message has been saved as a draft.)"},
+    "overwrite_confirm_title": {LANG_ZH: "確認覆蓋遠端", LANG_EN: "Confirm Overwrite Remote"},
+    "overwrite_confirm_msg": {
+        LANG_ZH: "即將 Commit 並以本地版本強制覆蓋遠端：\n\n{targets}\n\n遠端上本地沒有的 commit 將被移除，且無法從插件內復原。\n\n確定要繼續嗎？",
+        LANG_EN: "About to commit and force-overwrite the remote with your local version:\n\n{targets}\n\nRemote commits not present locally will be removed and cannot be restored from the plugin.\n\nContinue?"},
+    "btn_overwrite_remote": {LANG_ZH: "覆蓋遠端", LANG_EN: "Overwrite Remote"},
+    "log_overwrite_mode":        {LANG_ZH: "▶ 覆蓋模式：Commit 後將強制覆蓋遠端", LANG_EN: "▶ Overwrite mode: remote will be force-overwritten after commit"},
+    "log_overwrite_no_branch":   {LANG_ZH: "\n✗  無法覆蓋：目前不在任何分支上（detached HEAD）。", LANG_EN: "\n✗  Cannot overwrite: not on a branch (detached HEAD)."},
+    "log_overwrite_rebase":      {LANG_ZH: "\n✗  無法覆蓋：偵測到未完成的 rebase，本地狀態不完整。請先處理後再試。", LANG_EN: "\n✗  Cannot overwrite: an unfinished rebase was detected, so the local state is incomplete. Resolve it first."},
+    "log_overwrite_dirty":       {LANG_ZH: "\n✗  無法覆蓋：Commit 後本地仍有未提交的檔案，本地版本不完整：\n{files}", LANG_EN: "\n✗  Cannot overwrite: files are still uncommitted after commit, so the local version is incomplete:\n{files}"},
+    "log_overwrite_local_ok":    {LANG_ZH: "✓  本地檔案已全部提交（工作區乾淨）", LANG_EN: "✓  All local files committed (working tree clean)"},
+    "log_overwrite_fetching":    {LANG_ZH: "▶ 正在取得遠端最新狀態 (git fetch)...", LANG_EN: "▶ Fetching latest remote state (git fetch)..."},
+    "log_overwrite_fetch_fail":  {LANG_ZH: "\n✗  無法取得遠端狀態，已停止覆蓋：{err}", LANG_EN: "\n✗  Could not fetch remote state — overwrite stopped: {err}"},
+    "log_overwrite_will_drop":   {LANG_ZH: "⚠  以下遠端 commit 將被覆蓋移除：\n{commits}", LANG_EN: "⚠  These remote commits will be removed by the overwrite:\n{commits}"},
     "draft_close_confirm_title": {LANG_ZH: "尚未儲存的 Commit 變更", LANG_EN: "Unsaved Commit Changes"},
     "draft_close_confirm_msg": {
         LANG_ZH: "Commit 訊息已變更但尚未保存草稿，要如何處理？",

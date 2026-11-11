@@ -6,7 +6,7 @@ import threading
 
 from .i18n import t, get_global_remote2
 
-VERSION = "3.4.2"
+VERSION = "3.5.0"
 APPNAME = "RTnexen PPS Tool"
 
 ID_BACK = wx.ID_HIGHEST + 100
