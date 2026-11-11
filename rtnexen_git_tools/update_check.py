@@ -6,6 +6,7 @@ import threading
 import urllib.request
 import webbrowser
 import zipfile
+from datetime import datetime
 
 import wx
 
@@ -89,10 +90,48 @@ def _find_plugin_source(extracted_root):
             return dirpath
     return None
 
+def _short_err(e, limit=300):
+    """One readable line for a MessageBox. A failed copytree raises shutil.Error
+    whose message lists every failed file (src, dst, reason) — show the first
+    reason plus a count instead of a screen-filling list."""
+    if isinstance(e, shutil.Error) and e.args and isinstance(e.args[0], list) and e.args[0]:
+        first = e.args[0][0]
+        reason = first[2] if isinstance(first, (tuple, list)) and len(first) == 3 else first
+        more = len(e.args[0]) - 1
+        s = str(reason) + (t("auto_update_more_errors", n=more) if more else "")
+    else:
+        s = str(e)
+    return s if len(s) <= limit else s[:limit] + "…"
+
+def _remove_tree(path):
+    if os.path.islink(path):
+        os.unlink(path)
+    elif os.path.isdir(path):
+        shutil.rmtree(path, ignore_errors=True)
+
+def _staging_root():
+    """Where to assemble the new version: must be on the same volume as the
+    plugin so the final swap is a plain rename. Prefer the settings folder
+    (outside KiCad's plugins dir, which imports every package it finds)."""
+    cand = os.path.join(CONFIG_DIR, "update_staging")
+    try:
+        os.makedirs(cand, exist_ok=True)
+        if os.stat(cand).st_dev == os.stat(PLUGINS_PARENT).st_dev:
+            return cand
+    except OSError:
+        pass
+    return PLUGINS_PARENT
+
 def download_and_install_update(tag):
-    """Download the release archive for `tag`, back up the currently
-    installed plugin folder, then replace it with the new version.
-    Returns (True, backup_dir) on success, or (False, error_message)."""
+    """Download the release archive for `tag`, back up the installed plugin,
+    then swap the new version in. Returns (True, backup_dir) on success, or
+    (False, message to show the user).
+
+    The live plugin folder is never deleted-then-refilled: the new version is
+    first copied completely to a staging folder, then the two are swapped with
+    renames. Any failure before the swap leaves the installed plugin untouched;
+    a failed swap is undone by renaming the old folder back (no second copy that
+    could fail for the same reason — disk full, file locked by antivirus...)."""
     tmp_dir = tempfile.mkdtemp(prefix="rtnexen_update_")
     try:
         zip_path = os.path.join(tmp_dir, "release.zip")
@@ -111,29 +150,38 @@ def download_and_install_update(tag):
 
         # Keep the backup OUT of KiCad's plugins folder: KiCad imports every
         # sub-folder there that has an __init__.py, so a backup next to the
-        # plugin was loaded as a second (broken — the dotted name can't be
-        # imported) plugin on every KiCad start.
-        backup_dir = os.path.join(CONFIG_DIR, "backups", f"{PLUGIN_PKG_NAME}_v{VERSION}")
+        # plugin was loaded as a second (broken) plugin on every KiCad start.
+        # Time-stamped, so a retry never overwrites an earlier good backup.
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        backup_dir = os.path.join(CONFIG_DIR, "backups", f"{PLUGIN_PKG_NAME}_v{VERSION}_{stamp}")
         os.makedirs(os.path.dirname(backup_dir), exist_ok=True)
-        if os.path.isdir(backup_dir):
-            shutil.rmtree(backup_dir)
         shutil.copytree(PLUGIN_DIR, backup_dir)
 
+        root = _staging_root()
+        staged = os.path.join(root, f".{PLUGIN_PKG_NAME}-new")
+        aside = os.path.join(root, f".{PLUGIN_PKG_NAME}-old")
+        for p in (staged, aside):
+            _remove_tree(p)          # leftovers of an interrupted earlier run
         try:
-            shutil.rmtree(PLUGIN_DIR)
-            shutil.copytree(src, PLUGIN_DIR)
+            shutil.copytree(src, staged)     # slow / failure-prone; live plugin untouched
+            os.replace(PLUGIN_DIR, aside)    # fails if a file is locked; still untouched
         except Exception as e:
-            # Never leave KiCad with a missing or half-copied plugin (disk full,
-            # a file locked by antivirus, ...): put the backed-up version back.
+            _remove_tree(staged)
+            return False, t("auto_update_fail_unchanged", err=_short_err(e))
+        try:
+            os.replace(staged, PLUGIN_DIR)
+        except Exception as e:
             try:
-                shutil.rmtree(PLUGIN_DIR, ignore_errors=True)
-                shutil.copytree(backup_dir, PLUGIN_DIR, dirs_exist_ok=True)
+                os.replace(aside, PLUGIN_DIR)
             except Exception as e2:
-                return False, t("auto_update_restore_failed", err=str(e), err2=str(e2), backup=backup_dir)
-            return False, t("auto_update_rolled_back", err=str(e))
+                return False, t("auto_update_restore_failed", err=_short_err(e), err2=_short_err(e2),
+                                backup=backup_dir, name=PLUGIN_PKG_NAME)
+            _remove_tree(staged)
+            return False, t("auto_update_fail_unchanged", err=_short_err(e))
+        _remove_tree(aside)
         return True, backup_dir
     except Exception as e:
-        return False, str(e)
+        return False, t("auto_update_fail_unchanged", err=_short_err(e))
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -221,7 +269,7 @@ class UpdateDialog(wx.Dialog):
                            APPNAME, wx.OK | wx.ICON_INFORMATION)
             self.EndModal(wx.ID_OK)
         else:
-            wx.MessageBox(t("auto_update_fail", err=info),
+            wx.MessageBox(info,
                            APPNAME, wx.OK | wx.ICON_ERROR)
             for btn in (self.auto_btn, self.update_btn, self.skip_btn, self.cancel_btn):
                 btn.Enable()
