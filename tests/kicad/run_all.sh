@@ -33,7 +33,9 @@ run stale           k_stale.py      "teammate"
 if echo update | grep -qE "$F"; then
   SRV=$WORK/srv; mkdir -p $SRV; echo '{"tag_name":"v9.9.9"}' > $SRV/api.json; echo "# README" > $SRV/README.md
   (cd $S/../.. && git archive --format=zip --prefix=RTnexen_PPS_Tool-9.9.9/ HEAD -o $SRV/v9.9.9.zip)
-  (cd $SRV && exec python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1) & SP=$!; sleep 1
+  PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')
+  (cd $SRV && exec python3 -m http.server $PORT --bind 127.0.0.1 >/dev/null 2>&1) & SP=$!; sleep 1
+  export PPS_UPDATE_PORT=$PORT
   W=$WORK/update; rm -rf $W; mkdir -p $W/home; ${PYTHON:-python3} $S/mkproj.py $W/p; printf '[user]\nemail=t@t\nname=T\n' > $W/home/.gitconfig
   $S/run_kicad.sh $PKG $W/home $W/p/a/board.kicad_pcb $S/k_update.py >/dev/null
   echo "===== update"; python3 $S/show.py $W/home/result.json | cut -c1-300
