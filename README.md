@@ -23,6 +23,7 @@ For detailed installation instructions, please refer to the [Installation Wiki](
    - **↓ Pull** — 從遠端拉取最新版本
    - **● Status** — 查看目前分支與變更狀態
 4. Push 時需填入 commit message，其餘功能全自動完成
+5. Push 時可勾選 **Commit 後覆蓋遠端（強制 Push）**：會先強制確認原理圖/PCB 皆已儲存、所有變更皆已提交，並 fetch 遠端列出將被覆蓋的 commit，確認後才以 `--force-with-lease` 覆蓋
 
 ---
 
@@ -33,6 +34,7 @@ For detailed installation instructions, please refer to the [Installation Wiki](
    - **↓ Pull** — Pull latest changes from remote
    - **● Status** — View current branch and changes
 4. Only Push requires additional input (commit message); all other actions run automatically
+5. Push offers **Overwrite remote after commit (Force Push)**: it strictly verifies the schematic/PCB are saved and every change is committed, fetches the remote to list the commits that will be dropped, and only then overwrites with `--force-with-lease` after confirmation
 
 ---
 
@@ -41,4 +43,3 @@ For detailed installation instructions, please refer to the [Installation Wiki](
 MIT License — free to use, modify, and distribute.
 
 Copyright (c) 2026 RT Next-Energy Systems
->>>>>>> 7b46c2dbf6c168b2837526cbb45ff4353d9a0bfc

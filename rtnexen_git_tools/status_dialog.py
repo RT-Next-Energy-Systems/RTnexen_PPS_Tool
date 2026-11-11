@@ -1,5 +1,7 @@
+import re
 import wx
 import threading
+import traceback
 
 from .i18n import t, t_en
 from .common import _run, is_git_repo, get_target_configs, get_dialog_size, untrack_ignored_files
@@ -88,7 +90,11 @@ class StatusDialog(BaseGitDialog):
         for i, cfg in enumerate(self.targets):
             def log(msg, idx=i):
                 wx.CallAfter(self._append, idx, msg)
-            kind = _status_fn(log, cfg["path"], cfg["name"])
+            try:
+                kind = _status_fn(log, cfg["path"], cfg["name"])
+            except Exception:
+                log(traceback.format_exc())
+                kind = None
             wx.CallAfter(self._set_tab_icon, i, kind)
         wx.CallAfter(self._finish)
 
@@ -131,8 +137,10 @@ def _status_fn(log, path, name):
 
     sb = _run(["git", "status", "-sb"], path)
     first = sb.stdout.splitlines()[0] if sb.stdout else ""
-    ahead = "ahead" in first
-    if ahead or "behind" in first:
+    # Match git's "[ahead N" / "behind N]" marker, not a bare substring —
+    # a branch named e.g. "ahead-fix" used to show as "not pushed" (red).
+    ahead = re.search(r"\[ahead \d+", first) is not None
+    if ahead or re.search(r"[\[ ]behind \d+\]", first):
         log(t("status_sync", info=first.replace('## ', '')))
     log("")
 
@@ -145,7 +153,7 @@ def _status_fn(log, path, name):
     st = _run(["git", "status", "--porcelain"], path)
     if st.stdout.strip():
         log(t("status_uncommitted"))
-        for l in st.stdout.strip().splitlines():
+        for l in st.stdout.rstrip().splitlines():
             log(f"  {l}")
         kind = "dirty"
     else:

@@ -6,10 +6,13 @@ from datetime import datetime
 from .i18n import t
 from .common import (APPNAME, ID_BACK, _run, is_git_repo, get_dialog_size,
                       untrack_ignored_files, ask_push_nff_dialog,
-                      _rebase_in_progress, ask_stuck_rebase_dialog)
+                      _rebase_in_progress, ask_stuck_rebase_dialog,
+                      porcelain_lines, pull_rebase_or_rollback, watch_open_board,
+                      force_push_fresh_lease)
 from .base_dialog import BaseGitDialog
 from .pull_dialog import (
-    _get_branch, _ensure_upstream, _do_pull, _overwrite_local, _reset_to_remote,
+    _get_branch, _ensure_upstream, _do_pull, _discard_local_changes, _take_remote,
+    _reset_to_remote, _abort_merge_if_any,
     _is_non_fast_forward, _is_merge_conflict, _build_conflict_message,
 )
 
@@ -25,10 +28,25 @@ def scan_batch_repos(root_path):
     if not root_path or not os.path.isdir(root_path):
         return repos
     for entry in sorted(os.listdir(root_path)):
+        if entry.startswith("."):
+            continue  # .git, .history, ... are never projects
         full = os.path.join(root_path, entry)
-        if os.path.isdir(full) and is_git_repo(full):
+        if os.path.isdir(full) and _is_repo_root(full):
             repos.append({"name": entry, "path": full})
     return repos
+
+def _is_repo_root(path):
+    """True only if `path` is the top level of its own repository. A plain
+    sub-folder of a repo also passes `is_git_repo` (it is "inside a work
+    tree"), so with a batch root that is itself a repo, every sub-folder used
+    to be treated as a project and the parent repo pushed/pulled N times."""
+    if not is_git_repo(path):
+        return False
+    r = _run(["git", "rev-parse", "--show-toplevel"], path)
+    if r.returncode != 0 or not r.stdout.strip():
+        return False
+    norm = lambda p: os.path.normcase(os.path.realpath(p))
+    return norm(r.stdout.strip()) == norm(path)
 
 # ── Batch conflict dialog (adds "apply to all remaining") ──────────────────
 
@@ -71,8 +89,9 @@ def _batch_pull_one(log, path, forced_choice):
 
     log(t("log_checking_status"))
     st = _run(["git", "status", "--porcelain"], path)
-    if st.stdout.strip():
-        changed = st.stdout.strip().splitlines()
+    changed = porcelain_lines(st.stdout)
+    new_forced = None
+    if changed:
         log(t("log_uncommitted"))
         for l in changed:
             log(f"   {l}")
@@ -86,14 +105,16 @@ def _batch_pull_one(log, path, forced_choice):
         else:
             choice, apply_all = forced_choice, True
 
-        if choice == wx.ID_YES:
-            log("")
-            _ensure_upstream(log, path, branch)
-            ok = _overwrite_local(log, path, branch)
-            return ("ok" if ok else "failed"), (wx.ID_YES if apply_all else None)
-        else:
+        if choice != wx.ID_YES:
             log(t("log_pull_cancel_keep"))
             return "skipped", (wx.ID_NO if apply_all else None)
+        log("")
+        if not _discard_local_changes(log, path):
+            return "failed", (wx.ID_YES if apply_all else None)
+        new_forced = wx.ID_YES if apply_all else None
+        if new_forced is not None:
+            forced_choice = new_forced
+        # clean now — fall through to the normal pull
 
     _ensure_upstream(log, path, branch)
 
@@ -139,19 +160,20 @@ def _batch_pull_one(log, path, forced_choice):
 
             if choice == wx.ID_YES:
                 log("")
-                ok = _overwrite_local(log, path, branch)
+                ok = _take_remote(log, path, branch)
                 return ("ok" if ok else "failed"), (wx.ID_YES if apply_all else None)
             else:
+                _abort_merge_if_any(log, path)
                 log(t("log_merge_conflict_cancel"))
                 return "skipped", (wx.ID_NO if apply_all else None)
 
         log(t("log_pull_failed", combined=combined))
-        return "failed", None
+        return "failed", new_forced
 
     if out:
         log(out)
     log(t("log_pull_done"))
-    return "ok", None
+    return "ok", new_forced
 
 def _batch_pull_fn(log, root_path):
     repos = scan_batch_repos(root_path)
@@ -202,7 +224,7 @@ def _batch_push_one(log, path, commit_msg):
         if r.stdout.strip(): log(r.stdout.strip())
 
         log(t("log_committing", msg=commit_msg))
-        r = _run(["git", "commit", "-m", commit_msg], path)
+        r = _run(["git", "commit", "-F", "-"], path, input=commit_msg)
         if r.stdout.strip(): log(r.stdout.strip())
         if r.returncode != 0:
             err = r.stderr.strip() or r.stdout.strip()
@@ -231,11 +253,7 @@ def _batch_push_one(log, path, commit_msg):
                         log(t("log_rebase_abort_failed", err=(r_abort.stderr.strip() or r_abort.stdout.strip())))
                         return "failed"
                 log(t("log_rebase_before_push"))
-                rebase_args = ["git", "pull", "--rebase", "origin", branch_now] if branch_now else ["git", "pull", "--rebase"]
-                r_sync = _run(rebase_args, path)
-                if r_sync.returncode != 0:
-                    err = (r_sync.stderr.strip() or r_sync.stdout.strip())
-                    log(t("log_rebase_before_push_fail", err=err))
+                if not pull_rebase_or_rollback(log, path, branch_now):
                     return "failed"
                 r2 = _run(args, path)
                 if r2.stdout.strip(): log(r2.stdout.strip())
@@ -245,15 +263,7 @@ def _batch_push_one(log, path, commit_msg):
                 log(t("log_push_done"))
                 return "ok"
             elif choice == "force":
-                log(t("log_force_pushing"))
-                force_args = ["git", "push", "--force-with-lease", "origin", branch_now] if branch_now else ["git", "push", "--force-with-lease"]
-                r_f = _run(force_args, path)
-                if r_f.stdout.strip(): log(r_f.stdout.strip())
-                if r_f.returncode != 0:
-                    log(t("log_force_push_failed", err=r_f.stderr.strip()))
-                    return "failed"
-                log(t("log_force_push_done"))
-                return "ok"
+                return "ok" if force_push_fresh_lease(log, path, branch_now) else "failed"
             else:
                 log(t("log_push_skip_nff"))
                 return "skipped"
@@ -288,5 +298,5 @@ def run_batch_push(root_path):
 def run_batch_pull(root_path):
     from .operation_dialog import OperationDialog
     op = OperationDialog(t("subtitle_batch_pull"), root_path, _batch_pull_fn)
-    op.ShowModal()
+    watch_open_board(op.ShowModal)
     op.Destroy()

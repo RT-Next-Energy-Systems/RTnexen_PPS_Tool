@@ -1,5 +1,6 @@
 import wx
 import threading
+import traceback
 
 from .i18n import t
 from .common import ID_BACK, get_dialog_size
@@ -47,8 +48,14 @@ class OperationDialog(BaseGitDialog):
     def _worker(self):
         def log(msg):
             wx.CallAfter(self._append, msg)
-        self.run_fn(log, self.project_path)
-        wx.CallAfter(self._finish)
+        try:
+            self.run_fn(log, self.project_path)
+        except Exception:
+            # Without this an unexpected error killed the thread silently and
+            # left the dialog pulsing forever with Close/Back disabled.
+            log("\n✗  " + traceback.format_exc())
+        finally:
+            wx.CallAfter(self._finish)
 
     def _append(self, msg):
         if self.log:
