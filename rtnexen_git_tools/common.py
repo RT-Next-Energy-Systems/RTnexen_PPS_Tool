@@ -195,39 +195,6 @@ def pull_rebase_or_rollback(log, path, branch):
             log(t("log_rebase_abort_failed", err=(ra.stderr.strip() or ra.stdout.strip())))
     return False
 
-def force_push_fresh_lease(log, path, branch):
-    """Overwrite origin/<branch> with the local branch.
-
-    Fetch first: a rejected `git push` does NOT update the remote-tracking
-    ref, so a bare `--force-with-lease` compared against stale info and was
-    rejected every time ("! [rejected] ... (stale info)") — the "Force Push"
-    button never worked when a teammate had pushed. After the fetch the lease
-    is the remote state we just looked at (and listed to the user), so a push
-    landing in between is still refused. Returns True on success."""
-    if not branch:
-        log(t("log_overwrite_no_branch"))
-        return False
-    log(t("log_overwrite_fetching"))
-    r_fetch = _run(["git", "fetch", "origin", branch], path)
-    if r_fetch.returncode != 0:
-        err = r_fetch.stderr.strip() or r_fetch.stdout.strip()
-        # A branch that doesn't exist on the remote yet is fine — nothing to overwrite.
-        if "couldn't find remote ref" not in err.lower():
-            log(t("log_overwrite_fetch_fail", err=err))
-            return False
-    else:
-        dropped = _run(["git", "log", "--oneline", f"HEAD..refs/remotes/origin/{branch}"], path)
-        if dropped.returncode == 0 and dropped.stdout.strip():
-            log(t("log_overwrite_will_drop", commits=dropped.stdout.strip()))
-    log(t("log_force_pushing"))
-    r_f = _run(["git", "push", "--force-with-lease", "origin", branch], path)
-    if r_f.stdout.strip(): log(r_f.stdout.strip())
-    if r_f.returncode != 0:
-        log(t("log_force_push_failed", err=r_f.stderr.strip()))
-        return False
-    log(t("log_force_push_done"))
-    return True
-
 # ── Open-board staleness tracking (Pull → Push in the same KiCad session) ────
 # run_push() saves the board currently open in pcbnew before committing. If a
 # Pull just rewrote that .kicad_pcb on disk, the editor still holds the OLD
@@ -286,11 +253,9 @@ def save_open_board():
 
 # ── Push non-fast-forward dialog (shared by push_dialog & batch_dialog) ──────
 
-ID_FORCE_PUSH = wx.ID_HIGHEST + 101
-
 def ask_push_nff_dialog():
-    """Show Pull & Push / Force Push / Skip dialog from the UI thread.
-    Returns 'pull_push', 'force', or 'skip'."""
+    """Show Pull & Push / Skip dialog from the UI thread.
+    Returns 'pull_push' or 'skip'."""
     result = {"choice": "skip"}
     done = threading.Event()
 
@@ -299,19 +264,11 @@ def ask_push_nff_dialog():
             None,
             t("push_nff_msg"),
             f"{APPNAME} — {t('push_nff_title')}",
-            wx.YES_NO | wx.CANCEL | wx.ICON_WARNING)
-        dlg.SetYesNoCancelLabels(
-            t("btn_pull_then_push"),
-            t("btn_force_push"),
-            t("btn_skip_push"))
+            wx.YES_NO | wx.ICON_WARNING)
+        dlg.SetYesNoLabels(t("btn_pull_then_push"), t("btn_skip_push"))
         r = dlg.ShowModal()
         dlg.Destroy()
-        if r == wx.ID_YES:
-            result["choice"] = "pull_push"
-        elif r == wx.ID_NO:
-            result["choice"] = "force"
-        else:
-            result["choice"] = "skip"
+        result["choice"] = "pull_push" if r == wx.ID_YES else "skip"
         done.set()
 
     wx.CallAfter(_show)

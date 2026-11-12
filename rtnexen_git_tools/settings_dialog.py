@@ -132,6 +132,17 @@ class SettingsDialog(wx.Dialog):
 
         sizer.Add(batch_s, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 
+        # ── Restore (overwrite local files with a chosen commit) ──
+        restore_box = wx.StaticBox(panel, label=t("settings_restore_box"))
+        restore_s = wx.StaticBoxSizer(restore_box, wx.VERTICAL)
+        restore_hint = wx.StaticText(panel, label=t("settings_restore_hint"))
+        restore_hint.SetForegroundColour(wx.Colour(140, 140, 140))
+        restore_s.Add(restore_hint, 0, wx.ALL, 8)
+        restore_btn = wx.Button(panel, label=t("btn_restore_open"))
+        restore_btn.Bind(wx.EVT_BUTTON, self._on_restore)
+        restore_s.Add(restore_btn, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+        sizer.Add(restore_s, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+
         backup_box = wx.StaticBox(panel, label=t("settings_backup_box"))
         backup_s = wx.StaticBoxSizer(backup_box, wx.VERTICAL)
         backup_row = wx.BoxSizer(wx.HORIZONTAL)
@@ -295,6 +306,16 @@ class SettingsDialog(wx.Dialog):
                             defaultPath=self.path2_ctrl.GetValue() or self.project_path)
         if dlg.ShowModal() == wx.ID_OK:
             self.path2_ctrl.SetValue(dlg.GetPath())
+        dlg.Destroy()
+
+    def _on_restore(self, event):
+        if not is_git_repo(self.project_path):
+            wx.MessageBox(t("no_git_action", path=self.project_path),
+                          APPNAME, wx.OK | wx.ICON_WARNING)
+            return
+        from .restore_dialog import RestoreDialog
+        dlg = RestoreDialog(self, self.project_path)
+        dlg.ShowModal()
         dlg.Destroy()
 
     def _on_batch_browse(self, event):

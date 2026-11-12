@@ -196,6 +196,89 @@ STRINGS = {
         LANG_EN: "Importing will overwrite your current global settings (language, global Remote 2, skipped version, etc.). Continue?",
     },
 
+    # Restore to a commit (Settings → Restore)
+    "settings_restore_box": {LANG_ZH: " 還原到指定 Commit ", LANG_EN: " Restore to a Commit "},
+    "settings_restore_hint": {
+        LANG_ZH: "從歷史 commit 中選一個，把本地檔案覆蓋成該 commit 的內容。\n不會刪除任何歷史；覆蓋後需再 Push 才會同步到遠端。",
+        LANG_EN: "Pick a commit from history and overwrite your local files with its contents.\nNo history is deleted; Push afterwards to sync the remote.",
+    },
+    "btn_restore_open": {LANG_ZH: "還原...", LANG_EN: "Restore..."},
+    "restore_title": {LANG_ZH: "還原到指定 Commit", LANG_EN: "Restore to a Commit"},
+    "restore_warning_bar": {
+        LANG_ZH: "⚠  選好 commit 後，本地檔案會被該 commit 的內容覆蓋。",
+        LANG_EN: "⚠  Your local files will be overwritten with the contents of the selected commit.",
+    },
+    "restore_col_commit":  {LANG_ZH: "Commit", LANG_EN: "Commit"},
+    "restore_col_date":    {LANG_ZH: "日期", LANG_EN: "Date"},
+    "restore_col_author":  {LANG_ZH: "作者", LANG_EN: "Author"},
+    "restore_col_message": {LANG_ZH: "訊息", LANG_EN: "Message"},
+    "restore_current_mark": {LANG_ZH: "（目前）", LANG_EN: " (current)"},
+    "restore_limit_note": {LANG_ZH: "僅顯示最近 {n} 筆 commit。", LANG_EN: "Showing the latest {n} commits only."},
+    "restore_no_commits": {LANG_ZH: "（此 repository 還沒有任何 commit）", LANG_EN: "(No commits in this repository yet)"},
+    "restore_diff_label": {
+        LANG_ZH: "還原後會被改變的檔案（目前工作區 vs 所選 commit）：",
+        LANG_EN: "Files that will change (current working tree vs selected commit):",
+    },
+    "restore_diff_none": {LANG_ZH: "（沒有檔案會被改變）", LANG_EN: "(no files will change)"},
+    "btn_restore_apply": {LANG_ZH: "還原到此 Commit...", LANG_EN: "Restore to This Commit..."},
+    "restore_confirm_title": {LANG_ZH: "確認還原（覆蓋本地）", LANG_EN: "Confirm Restore (Overwrite Local)"},
+    "restore_confirm_head": {
+        LANG_ZH: "⚠  危險操作：即將覆蓋本地檔案",
+        LANG_EN: "⚠  Dangerous: your local files are about to be overwritten",
+    },
+    "restore_confirm_body": {
+        LANG_ZH: "目標：{target}\n路徑：{path}\n\n還原到：{short}  ({date})\n{subject}\n\n"
+                 "• 本地所有被 git 追蹤的檔案會變成該 commit 的內容。\n"
+                 "• 還原會以一個新的 commit 記錄，原本的歷史不會被刪除。\n"
+                 "• 未被追蹤的新檔案不受影響。\n"
+                 "• 還原後需到 Push 才會同步到遠端。\n"
+                 "• 若 KiCad 已開啟此專案，還原後請重新載入（PCB：檔案 → 復原 Revert；原理圖：關閉後重開），"
+                 "且不要儲存舊內容，否則會蓋掉還原結果。",
+        LANG_EN: "Target: {target}\nPath: {path}\n\nRestore to: {short}  ({date})\n{subject}\n\n"
+                 "• Every git-tracked file will take the contents it had in that commit.\n"
+                 "• The restore is recorded as a NEW commit; existing history is not deleted.\n"
+                 "• Untracked new files are not affected.\n"
+                 "• Push afterwards to sync the remote.\n"
+                 "• If KiCad has this project open, reload it after the restore (PCB: File → Revert; "
+                 "schematic: close and reopen) and do not save the old content, or it will overwrite the restore.",
+    },
+    "restore_confirm_dirty": {
+        LANG_ZH: "⚠  有 {n} 個檔案含尚未提交的變更，這些變更將被永久捨棄、無法復原：\n{files}",
+        LANG_EN: "⚠  {n} file(s) have uncommitted changes. They will be discarded permanently and cannot be recovered:\n{files}",
+    },
+    "restore_confirm_more": {LANG_ZH: "  …還有 {n} 個", LANG_EN: "  …and {n} more"},
+    "restore_confirm_type": {
+        LANG_ZH: "為避免誤觸，請輸入 commit 編號  {short}  以確認：",
+        LANG_EN: "To avoid accidents, type the commit id  {short}  to confirm:",
+    },
+    "btn_restore_confirm": {LANG_ZH: "確認覆蓋本地", LANG_EN: "Overwrite Local"},
+    "restore_err_detached": {
+        LANG_ZH: "目前不在任何分支上（detached HEAD），無法還原。請先切換回分支。",
+        LANG_EN: "Not on any branch (detached HEAD) — cannot restore. Switch back to a branch first.",
+    },
+    "restore_err_busy": {
+        LANG_ZH: "偵測到未完成的 rebase 或 merge，請先處理後再還原。",
+        LANG_EN: "An unfinished rebase or merge was detected. Resolve it before restoring.",
+    },
+    "restore_fail": {
+        LANG_ZH: "還原失敗：\n{err}\n\n請到 Status 檢查目前狀態。",
+        LANG_EN: "Restore failed:\n{err}\n\nCheck the current state in Status.",
+    },
+    "restore_done": {
+        LANG_ZH: "✓  已還原：本地檔案現在與 commit {short} 相同，並已記錄為新的 commit。\n\n"
+                 "接下來：\n"
+                 "• 若 KiCad 已開啟此專案，請重新載入（PCB：檔案 → 復原 Revert；原理圖：關閉後重開），不要儲存舊內容。\n"
+                 "• 要同步到遠端，請回到 Push 視窗推送。",
+        LANG_EN: "✓  Restored: local files now match commit {short}, recorded as a new commit.\n\n"
+                 "Next:\n"
+                 "• If KiCad has this project open, reload it (PCB: File → Revert; schematic: close and reopen) and do not save the old content.\n"
+                 "• Use the Push window to sync the remote.",
+    },
+    "restore_done_same": {
+        LANG_ZH: "本地檔案原本就與 commit {short} 的內容相同，沒有新增 commit。（未提交的變更若有，已被還原掉。）",
+        LANG_EN: "Local files already matched commit {short}; no new commit was made. (Any uncommitted changes were reverted.)",
+    },
+
     # Settings apply results
     "r1_name_default": {LANG_ZH: "Remote 1：使用預設名稱（'{name}'）", LANG_EN: "Remote 1: using default name ('{name}')"},
     "r1_name_saved": {LANG_ZH: "Remote 1（'{name}'）：名稱已儲存", LANG_EN: "Remote 1 ('{name}'): name saved"},
@@ -224,27 +307,6 @@ STRINGS = {
     "btn_push_submit": {LANG_ZH: "推送 ↑", LANG_EN: "Push ↑"},
     "btn_pull_submit": {LANG_ZH: "拉取 ↓", LANG_EN: "Pull ↓"},
     "btn_save_draft": {LANG_ZH: "保存草稿", LANG_EN: "Save Draft"},
-    "overwrite_after_commit": {LANG_ZH: "Commit 後覆蓋遠端（強制 Push）", LANG_EN: "Overwrite remote after commit (Force Push)"},
-    "overwrite_after_commit_hint": {
-        LANG_ZH: "⚠  將以本地版本取代遠端，遠端上本地沒有的 commit 會被移除。執行前會強制檢查本地檔案皆已儲存且全部提交。",
-        LANG_EN: "⚠  Remote will be replaced by your local version; remote commits not present locally will be removed. Local files are strictly checked to be saved and fully committed first."},
-    "overwrite_unsaved_title": {LANG_ZH: "無法覆蓋：本地檔案不是最新", LANG_EN: "Cannot Overwrite: Local Files Not Up To Date"},
-    "overwrite_unsaved_msg": {
-        LANG_ZH: "覆蓋遠端前必須確保本地檔案為最新，但以下檔案在編輯器中仍有未儲存的變更：\n\n{files}\n\n請先在原理圖/PCB 編輯器內按 Ctrl+S 儲存，再重新執行 Push。\n（Commit 訊息已自動保存為草稿）",
-        LANG_EN: "Local files must be up to date before overwriting the remote, but these files still have unsaved changes in their editor:\n\n{files}\n\nSave with Ctrl+S in the Schematic/PCB editor, then run Push again.\n(Your commit message has been saved as a draft.)"},
-    "overwrite_confirm_title": {LANG_ZH: "確認覆蓋遠端", LANG_EN: "Confirm Overwrite Remote"},
-    "overwrite_confirm_msg": {
-        LANG_ZH: "即將 Commit 並以本地版本強制覆蓋遠端：\n\n{targets}\n\n遠端上本地沒有的 commit 將被移除，且無法從插件內復原。\n\n確定要繼續嗎？",
-        LANG_EN: "About to commit and force-overwrite the remote with your local version:\n\n{targets}\n\nRemote commits not present locally will be removed and cannot be restored from the plugin.\n\nContinue?"},
-    "btn_overwrite_remote": {LANG_ZH: "覆蓋遠端", LANG_EN: "Overwrite Remote"},
-    "log_overwrite_mode":        {LANG_ZH: "▶ 覆蓋模式：Commit 後將強制覆蓋遠端", LANG_EN: "▶ Overwrite mode: remote will be force-overwritten after commit"},
-    "log_overwrite_no_branch":   {LANG_ZH: "\n✗  無法覆蓋：目前不在任何分支上（detached HEAD）。", LANG_EN: "\n✗  Cannot overwrite: not on a branch (detached HEAD)."},
-    "log_overwrite_rebase":      {LANG_ZH: "\n✗  無法覆蓋：偵測到未完成的 rebase，本地狀態不完整。請先處理後再試。", LANG_EN: "\n✗  Cannot overwrite: an unfinished rebase was detected, so the local state is incomplete. Resolve it first."},
-    "log_overwrite_dirty":       {LANG_ZH: "\n✗  無法覆蓋：Commit 後本地仍有未提交的檔案，本地版本不完整：\n{files}", LANG_EN: "\n✗  Cannot overwrite: files are still uncommitted after commit, so the local version is incomplete:\n{files}"},
-    "log_overwrite_local_ok":    {LANG_ZH: "✓  本地檔案已全部提交（工作區乾淨）", LANG_EN: "✓  All local files committed (working tree clean)"},
-    "log_overwrite_fetching":    {LANG_ZH: "▶ 正在取得遠端最新狀態 (git fetch)...", LANG_EN: "▶ Fetching latest remote state (git fetch)..."},
-    "log_overwrite_fetch_fail":  {LANG_ZH: "\n✗  無法取得遠端狀態，已停止覆蓋：{err}", LANG_EN: "\n✗  Could not fetch remote state — overwrite stopped: {err}"},
-    "log_overwrite_will_drop":   {LANG_ZH: "⚠  以下遠端 commit 將被覆蓋移除：\n{commits}", LANG_EN: "⚠  These remote commits will be removed by the overwrite:\n{commits}"},
     "draft_close_confirm_title": {LANG_ZH: "尚未儲存的 Commit 變更", LANG_EN: "Unsaved Commit Changes"},
     "draft_close_confirm_msg": {
         LANG_ZH: "Commit 訊息已變更但尚未保存草稿，要如何處理？",
@@ -285,15 +347,11 @@ STRINGS = {
     "log_commit_failed":      {LANG_ZH: "\n✗  提交失敗：{err}", LANG_EN: "\n✗  Commit failed: {err}"},
     "push_nff_title": {LANG_ZH: "推送被拒絕（Non-Fast-Forward）", LANG_EN: "Push Rejected (Non-Fast-Forward)"},
     "push_nff_msg":   {
-        LANG_ZH: "遠端有本地尚未同步的 commit，推送被拒絕。\n\n請選擇處理方式：\n• Pull 後 Push：先拉取遠端變更再推送\n• 強制 Push：以本地版本覆蓋遠端（遠端多出的 commit 會被移除）\n• 跳過：略過此專案",
-        LANG_EN: "Remote has commits not present locally — push rejected.\n\nHow would you like to proceed?\n• Pull & Push: pull remote changes then push\n• Force Push: overwrite the remote with your local version (extra remote commits are removed)\n• Skip: leave this project for now",
+        LANG_ZH: "遠端有本地尚未同步的 commit，推送被拒絕。\n\n請選擇處理方式：\n• Pull 後 Push：先拉取遠端變更再推送\n• 跳過：略過此專案",
+        LANG_EN: "Remote has commits not present locally — push rejected.\n\nHow would you like to proceed?\n• Pull & Push: pull remote changes then push\n• Skip: leave this project for now",
     },
     "btn_pull_then_push": {LANG_ZH: "Pull 後 Push",    LANG_EN: "Pull & Push"},
-    "btn_force_push":     {LANG_ZH: "強制 Push（覆蓋遠端）", LANG_EN: "Force Push (overwrite remote)"},
     "btn_skip_push":      {LANG_ZH: "跳過",             LANG_EN: "Skip"},
-    "log_force_pushing":      {LANG_ZH: "▶ 正在強制推送（--force-with-lease）...", LANG_EN: "▶ Force pushing (--force-with-lease)..."},
-    "log_force_push_done":    {LANG_ZH: "\n✓  強制推送完成！（遠端已被覆蓋）", LANG_EN: "\n✓  Force push complete! (remote overwritten)"},
-    "log_force_push_failed":  {LANG_ZH: "\n✗  強制推送失敗：{err}", LANG_EN: "\n✗  Force push failed: {err}"},
     "log_push_non_ff":    {LANG_ZH: "\n⚠  推送被拒絕（遠端有新 commit）", LANG_EN: "\n⚠  Push rejected (remote has new commits)"},
     "log_push_skip_nff":  {LANG_ZH: "⏭  已跳過（使用者選擇不 Pull）", LANG_EN: "⏭  Skipped (user chose not to pull)"},
     "log_rebase_before_push":      {LANG_ZH: "▶ 正在從遠端同步（rebase）...", LANG_EN: "▶ Syncing from remote (rebase) before push..."},
