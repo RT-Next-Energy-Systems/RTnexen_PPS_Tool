@@ -38,10 +38,23 @@ class OperationDialog(BaseGitDialog):
         row.Add(self.close_btn, 0)
         cs.Add(row, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 
+        self._running = False
+        self.Bind(wx.EVT_CLOSE, self._on_close)
         self.FinalizeLayout()
         wx.CallAfter(self._start)
 
+    def _on_close(self, event):
+        # Closing mid-operation used to end the dialog while git kept running
+        # in the background (and let another Push/Pull start on top of it).
+        if self._running and event.CanVeto():
+            event.Veto()
+            return
+        event.Skip()
+
     def _start(self):
+        self._running = True
+        if getattr(self, "settings_btn", None):
+            self.settings_btn.Disable()
         self.gauge.Pulse()
         threading.Thread(target=self._worker, daemon=True).start()
 
@@ -62,6 +75,9 @@ class OperationDialog(BaseGitDialog):
             self.log.AppendText(msg + "\n")
 
     def _finish(self):
+        self._running = False
+        if getattr(self, "settings_btn", None):
+            self.settings_btn.Enable()
         if self.gauge:
             self.gauge.SetValue(100)
         if self.close_btn:

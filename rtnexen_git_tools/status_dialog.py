@@ -11,6 +11,7 @@ from .base_dialog import BaseGitDialog
 #   green  — clean working tree, in sync with remote (nothing to push/pull)
 #   yellow — uncommitted local changes
 #   red    — working tree clean, but local commits not yet pushed
+#   blue   — working tree clean, but the remote has new commits (Pull needed)
 #   grey   — unknown / not a git repo
 # Drawn as small bitmaps (rather than emoji) because native wx.Notebook tabs
 # on Windows render color emoji as monochrome fallback glyphs.
@@ -18,6 +19,7 @@ STATUS_DOT_COLORS = {
     "clean": wx.Colour(76, 175, 80),
     "dirty": wx.Colour(255, 204, 77),
     "unpushed": wx.Colour(229, 57, 53),
+    "behind":   wx.Colour(66, 133, 244),
     None: wx.Colour(120, 120, 120),
 }
 
@@ -134,13 +136,21 @@ def _status_fn(log, path, name):
 
     u = _run(["git", "remote", "get-url", "origin"], path)
     log(t("status_remote", url=u.stdout.strip() if u.returncode == 0 else t("status_no_remote")))
+    if u.returncode == 0:
+        # Without a fetch, ahead/behind compares against a stale origin/<branch>
+        # and a clean tree shows green although teammates pushed new commits.
+        fr = _run(["git", "fetch", "--quiet", "origin"], path)
+        if fr.returncode != 0:
+            lines = (fr.stderr.strip() or fr.stdout.strip()).splitlines()
+            log(t("status_fetch_failed", err=lines[-1] if lines else ""))
 
     sb = _run(["git", "status", "-sb"], path)
     first = sb.stdout.splitlines()[0] if sb.stdout else ""
     # Match git's "[ahead N" / "behind N]" marker, not a bare substring —
     # a branch named e.g. "ahead-fix" used to show as "not pushed" (red).
     ahead = re.search(r"\[ahead \d+", first) is not None
-    if ahead or re.search(r"[\[ ]behind \d+\]", first):
+    behind = re.search(r"[\[ ]behind \d+\]", first) is not None
+    if ahead or behind:
         log(t("status_sync", info=first.replace('## ', '')))
     log("")
 
@@ -158,7 +168,9 @@ def _status_fn(log, path, name):
         kind = "dirty"
     else:
         log(t("status_clean"))
-        kind = "unpushed" if ahead else "clean"
+        kind = "unpushed" if ahead else ("behind" if behind else "clean")
+        if behind:
+            log(t("status_behind_hint"))
     log("")
 
     lg = _run(["git", "log", "--oneline", "-8"], path)

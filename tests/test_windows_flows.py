@@ -7,7 +7,7 @@ import os, sys, locale, platform, subprocess, tempfile, traceback
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from harness import *                      # real wx, stub pcbnew, scripted dialogs, isolated HOME
 import wx
-from rtnexen_git_tools import common, pull_dialog as pl, push_dialog as pd, status_dialog as sd
+from rtnexen_git_tools import common, pull_dialog as pl, push_dialog as pd, status_dialog as sd, restore_dialog as rs
 
 YES, NO = wx.ID_YES, wx.ID_NO
 def g(cwd, *args, inp=None):
@@ -81,11 +81,11 @@ def W5_pull_conflict_overwrite_local():
     return bool(ok) and bool(SHOWN) and "TEAM" in open(os.path.join(a, "board.kicad_pcb"), encoding="utf-8").read() and g(a, "status", "--porcelain") == ""
 
 @case
-def W6_push_rejected_force_push():
+def W6_push_rejected_skip_leaves_remote_untouched():
     rem, a, b = repos(); team(b, "TEAM", "隊友修改")
-    write(os.path.join(a, "n.txt"), "n"); ANSWERS[:] = [NO]
-    run_worker(pd._push_one, log, a, "強制覆蓋")
-    return g(rem, "log", "-1", "--format=%s", "main") == "強制覆蓋"
+    write(os.path.join(a, "n.txt"), "n"); ANSWERS[:] = [NO]          # Skip (there is no Force Push any more)
+    run_worker(pd._push_one, log, a, "不應覆蓋")
+    return g(rem, "log", "-1", "--format=%s", "main") == "隊友修改"
 
 @case
 def W7_push_rejected_pull_and_push_conflict_rolls_back():
@@ -95,11 +95,17 @@ def W7_push_rejected_pull_and_push_conflict_rolls_back():
     return not common._rebase_in_progress(a) and "<<<<<<<" not in open(os.path.join(a, "board.kicad_pcb"), encoding="utf-8").read()
 
 @case
-def W8_overwrite_mode_push():
-    rem, a, b = repos(); team(b, "TEAM", "隊友修改")
-    write(os.path.join(a, "n.txt"), "n")
-    run_worker(pd._push_one, log, a, "覆蓋遠端", True)
-    return g(rem, "log", "--format=%s", "main").splitlines() == ["覆蓋遠端", "init"]
+def W8_restore_to_commit_then_plain_push():
+    rem, a, b = repos()
+    c1 = g(a, "rev-parse", "HEAD")
+    write(os.path.join(a, "board.kicad_pcb"), "L1\n新\nL3\n"); write(os.path.join(a, "新增.txt"), "x")
+    g(a, "add", "-A"); commit_utf8(a, "第二版"); g(a, "push", "-q")
+    write(os.path.join(a, "board.kicad_pcb"), "髒"); write(os.path.join(a, "未追蹤.txt"), "keep")
+    kind, _ = rs.restore_to_commit(a, c1, c1[:7], "init")
+    ok = (kind == "ok" and open(os.path.join(a, "board.kicad_pcb"), encoding="utf-8").read() == "L1\nL2\nL3\n"
+          and not os.path.exists(os.path.join(a, "新增.txt")) and os.path.exists(os.path.join(a, "未追蹤.txt")))
+    run_worker(pd._push_one, log, a, "還原後推送")
+    return ok and g(rem, "rev-parse", "main") == g(a, "rev-parse", "HEAD")
 
 @case
 def W9_untrack_ignored_chinese_file():
@@ -117,14 +123,20 @@ def W10_git_missing_no_crash():
         os.environ["PATH"] = old
 
 @case
-def W11_gui_push_dialog_overwrite_toggle():
-    from rtnexen_git_tools.push_dialog import PushDialog
+def W11_gui_restore_dialog():
+    import time
     rem, a, b = repos()
-    d = PushDialog(a)
-    for _ in range(30): app.Yield(True)
-    d.overwrite_chk.SetValue(True); d._on_overwrite_toggle(None)
-    ok = d.GetOverwrite() and d.overwrite_hint.IsShown()
-    d.Destroy(); return ok
+    write(os.path.join(a, "f.txt"), "2"); g(a, "add", "-A"); commit_utf8(a, "第二筆")
+    d = rs.RestoreDialog(None, a)
+    for _ in range(100): app.Yield(True); time.sleep(0.01)
+    rows, en0 = d.list.GetItemCount(), d.restore_btn.IsEnabled()
+    d.list.Select(1)
+    for _ in range(100): app.Yield(True); time.sleep(0.01)
+    en1 = d.restore_btn.IsEnabled(); c = d._commits[1]; d.Destroy()
+    cd = rs._ConfirmDialog(None, {"name": "專案", "path": a}, c, [" M board.kicad_pcb"])
+    cd.entry.SetValue("x"); off = not cd.ok_btn.IsEnabled()
+    cd.entry.SetValue(c["short"]); on = cd.ok_btn.IsEnabled(); cd.Destroy()
+    return rows == 2 and not en0 and en1 and off and on
 
 @case
 def W12_gui_every_dialog_builds_and_runs():

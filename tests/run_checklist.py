@@ -68,7 +68,7 @@ if args.kicad and shutil.which("pcbnew"):
     print("running real-KiCad suite (~10 min) ...", flush=True)
     o = xrun(["tests/kicad/run_all.sh"], {"PYTHON": args.python, "WORK": tempfile.mkdtemp(prefix="pps_kicad_")}, timeout=7200).stdout
     for name, verdict in re.findall(r"^===== (.+?)\n\s+-> (PASS|FAIL.*)$", o, re.M):
-        R["kicad:" + name.replace("update: KiCad restart", "update_restart")] = verdict.strip()
+        R["kicad:" + re.sub(r"^(update_\w+): KiCad restart$", r"\1_restart", name)] = verdict.strip()
 else:
     R["kicad:*"] = "SKIP (pass --kicad on a machine with KiCad pcbnew)"
 

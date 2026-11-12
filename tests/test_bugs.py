@@ -8,6 +8,7 @@ from rtnexen_git_tools import pull_dialog as pl, push_dialog as pd, status_dialo
 YES, NO, CANCEL = wx.ID_YES, wx.ID_NO, wx.ID_CANCEL
 RESULTS = {}
 def case(fn):
+    UNEXPECTED.clear()
     if os.environ.get("ONLY") and not fn.__name__.startswith(tuple(os.environ["ONLY"].split(","))): return fn
     LOG.clear(); SHOWN.clear(); ANSWERS.clear(); SAVED.clear()
     try:
@@ -186,27 +187,24 @@ def B17_batch_pull_conflict_overwrite_takes_remote():
     assert "TEAM" in open(os.path.join(a, "board.kicad_pcb")).read()
 
 @case
-def E01_push_dialog_overwrite_checkbox_gui():
+def E01_push_dialog_has_no_overwrite_option():
+    # "Overwrite remote after commit" (force push) was removed in v3.5.3.
     from rtnexen_git_tools.push_dialog import PushDialog
     base, a, b = mkrepos()
     dlg = PushDialog(a)
     for _ in range(30): app.Yield(True)
-    assert not dlg.GetOverwrite()
-    assert not dlg.overwrite_hint.IsShown()
-    dlg.overwrite_chk.SetValue(True)
-    dlg._on_overwrite_toggle(None)
-    shown, label, ov = dlg.overwrite_hint.IsShown(), dlg.ok_btn.GetLabel(), dlg.GetOverwrite()
+    label = dlg.ok_btn.GetLabel()
+    has = hasattr(dlg, "overwrite_chk") or hasattr(dlg, "GetOverwrite")
     dlg.Destroy()
-    assert ov and shown and label == "Overwrite Remote", (ov, shown, label)
+    assert not has and label == "Push \u2191", (has, label)
 
-def _run_push_e2e(a, overwrite, answers, messages=None, targets=None):
+def _run_push_e2e(a, answers, messages=None, targets=None):
     from rtnexen_git_tools import git_runner as gr
     class FakePush:
         def __init__(s, p): pass
         def ShowModal(s): return wx.ID_OK
         def GetMessages(s): return messages or {"project": "e2e commit", "library": ""}
         def GetTargets(s): return targets or [{"name": "P", "path": a, "kind": "project"}]
-        def GetOverwrite(s): return overwrite
         def Destroy(s): pass
     class FakeOp:
         def __init__(s, sub, path, fn): s.fn, s.path = fn, path
@@ -219,32 +217,10 @@ def _run_push_e2e(a, overwrite, answers, messages=None, targets=None):
     finally: gr.PushDialog, gr.OperationDialog = orig
 
 @case
-def E02_run_push_overwrite_end_to_end():
-    base, a, b = mkrepos(); diverge(a, b, conflict=True)
-    sh("echo new > note.txt", a)
-    _run_push_e2e(a, True, [YES])          # confirm overwrite
-    remote = os.path.join(base, "remote.git")
-    assert git(remote, "log", "-1", "--format=%s", "main") == "e2e commit", "\n".join(LOG)
-    assert "team" not in git(remote, "log", "--format=%s", "main")
-
-@case
-def E03_run_push_overwrite_blocked_by_unsaved_schematic():
-    import time
-    base, a, b = mkrepos()
-    sh("echo s > top.kicad_sch && git add . && git commit -qm sch && git push -q", a)
-    time.sleep(0.02); sh("echo unsaved > _autosave-top.kicad_sch", a)
-    before = git(os.path.join(base, "remote.git"), "rev-parse", "main")
-    _run_push_e2e(a, True, [YES])          # first YES = continue past the generic pre-dialog warning
-    assert any("Cannot Overwrite" in c for c, m in SHOWN), SHOWN
-    assert git(os.path.join(base, "remote.git"), "rev-parse", "main") == before, "remote changed"
-    from rtnexen_git_tools.i18n import get_commit_draft
-    assert get_commit_draft(a) == "e2e commit", "commit message not kept as draft"
-
-@case
 def E04_normal_push_and_pull_roundtrip():
     base, a, b = mkrepos()
     sh("echo hi > 中文檔名.txt", a)
-    _run_push_e2e(a, False, [])
+    _run_push_e2e(a, [])
     assert run_worker(pl._pull_one, log, b), "\n".join(LOG)
     assert os.path.exists(os.path.join(b, "中文檔名.txt"))
     assert sd._status_fn(log, b, "B") == "clean"
@@ -300,17 +276,20 @@ def B22_push_dialog_autofill_not_reported_as_unsaved_draft():
 def E05_empty_library_message_keeps_project_message():
     from rtnexen_git_tools.i18n import get_commit_draft
     base, a, b = mkrepos(); base2, lib, _ = mkrepos()
-    _run_push_e2e(a, False, [], messages={"project": "my long project msg", "library": ""},
+    _run_push_e2e(a, [], messages={"project": "my long project msg", "library": ""},
                   targets=[{"name": "P", "path": a, "kind": "project"}, {"name": "L", "path": lib, "kind": "library"}])
     assert any("cannot be empty" in m for c, m in SHOWN), SHOWN
     assert get_commit_draft(a) == "my long project msg", "typed project message was discarded"
 
 @case
-def B23_force_push_after_rejection_works():
+def B23_push_rejected_has_no_force_option_skip_leaves_remote_untouched():
+    # v3.5.3 removed Force Push: the rejected-push dialog is only Pull & Push / Skip.
     base, a, b = mkrepos(); diverge(a, b, conflict=False)
-    ANSWERS[:] = [NO]    # Force Push
+    ANSWERS[:] = [NO]    # Skip
     run_worker(pd._push_one, log, a, "forced")
-    assert git(os.path.join(base, "remote.git"), "log", "-1", "--format=%s", "main") == "forced", "\n".join(LOG[-4:])
+    remote = os.path.join(base, "remote.git")
+    assert git(remote, "log", "-1", "--format=%s", "main") == "team", "\n".join(LOG[-4:])
+    assert not hasattr(common, "force_push_fresh_lease") and not hasattr(common, "ID_FORCE_PUSH")
 
 @case
 def B24_push_cancel_prompt_bound_to_own_button():
@@ -501,5 +480,216 @@ def B31_update_success_and_retry_keep_every_backup():
     assert _snapshot_tree(b1) == OLD_TREE, "first (only good) backup was overwritten"
     assert _snapshot_tree(inst) == {"__init__.py": "#new", "a.py": "new", "new_module.py": "new", os.path.join("icons", "x.png"): "newpng"}
     assert _no_leftovers(plugins) == [], _no_leftovers(plugins)
+
+@case
+def B32_pull_and_push_rebase_marks_open_board_stale():
+    # review #1: "Pull & Push" rebases the teammate's PCB change onto disk; the
+    # editor still holds the old board, so the NEXT push must not save it over.
+    from rtnexen_git_tools import git_runner as gr
+    base, a, b = mkrepos()
+    BOARD["file"] = f = os.path.join(a, "board.kicad_pcb")
+    sh("printf 'L1\\nTEAM\\nL3\\n' > board.kicad_pcb && git commit -qam team && git push -q", b)
+    sh("echo n > notes.txt", a)
+    orig_save = pcb.SaveBoard
+    pcb.SaveBoard = lambda fn, brd: open(fn, "w").write("L1\nL2\nL3\n")   # editor still holds the pre-pull board
+    try:
+        _run_push_e2e(a, [YES])           # rejected -> Pull & Push (rebase rewrites board.kicad_pcb)
+        assert "TEAM" in open(f).read()
+        assert common.save_open_board() == "stale", "rebased board not marked stale"
+        assert "TEAM" in open(f).read()
+    finally:
+        BOARD["file"] = ""; pcb.SaveBoard = orig_save
+
+@case
+def B33_batch_apply_all_for_uncommitted_does_not_auto_reset_conflicts():
+    # review #2: "apply to all: overwrite" chosen for UNCOMMITTED changes must not
+    # silently answer a later MERGE-CONFLICT prompt with reset --hard.
+    base, a, b = mkrepos(); diverge(a, b, conflict=True)     # a: committed, unpushed, conflicting
+    sh("echo junk > scratch.kicad_prl && git add scratch.kicad_prl", a)   # plus an uncommitted change
+    ANSWERS[:] = [YES, YES,      # uncommitted prompt: Overwrite Local + "apply to all" confirm
+                  NO, NO]        # conflict prompt must still be ASKED: Keep Local, not for all
+    out, forced = run_worker(bd._batch_pull_one, log, a, None)
+    assert len(SHOWN) >= 3, "conflict prompt was skipped: " + str([c for c, m in SHOWN])
+    assert git(a, "log", "-1", "--format=%s") == "mine", "committed local work was reset away"
+
+@case
+def B34_operation_dialog_cannot_be_closed_while_running():
+    # review #3: [X] must not end the dialog while the git worker is still running.
+    import threading, time
+    from rtnexen_git_tools.operation_dialog import OperationDialog
+    gate = threading.Event()
+    d = OperationDialog("x", "/tmp", lambda log, p: gate.wait(10))
+    d.Show()
+    for _ in range(30): app.Yield(True); time.sleep(0.01)
+    vetoed = not d.Close()            # Close() returns False when EVT_CLOSE was vetoed
+    shown = d.IsShown()
+    gate.set()
+    for _ in range(50): app.Yield(True); time.sleep(0.01)
+    d.Destroy()
+    assert vetoed and shown, "dialog closed while the worker was running"
+
+@case
+def B35_remote2_named_ALL_selects_only_the_library():
+    # review #4: targets were picked by radio LABEL; a Remote 2 named "ALL" pushed both repos.
+    from rtnexen_git_tools.push_dialog import PushDialog
+    from rtnexen_git_tools.pull_dialog import PullDialog
+    base, a, b = mkrepos(); _, lib, _ = mkrepos()
+    sh(f"git config rtnexen.remote2scope project && git config rtnexen.remote2name ALL && git config rtnexen.remote2path {lib}", a)
+    picked = []
+    for cls in (PushDialog, PullDialog):
+        d = cls(a); d.target_radio.SetSelection(2)       # choices: ALL, 專案/Project, ALL(library)
+        picked.append([c["path"] for c in d.GetTargets()]); d.Destroy()
+    assert picked == [[lib], [lib]], picked
+
+@case
+def B36_import_settings_keeps_this_machines_remote2_path():
+    # review #5: importing (even your own backup) wiped this PC's Remote 2 path.
+    import json, tempfile
+    from rtnexen_git_tools.settings_dialog import SettingsDialog
+    base, a, b = mkrepos()
+    i18n.set_global_remote2("Lib", "/this/pc/lib")
+    f = os.path.join(tempfile.mkdtemp(), "exp.json")
+    json.dump({"language": "en", "remote2_name": "Lib", "remote2_path": "/other/pc/lib"}, open(f, "w"))
+    class FD:
+        def __init__(s, *a, **k): pass
+        def ShowModal(s): return wx.ID_OK
+        def GetPath(s): return f
+        def Destroy(s): pass
+    orig = wx.FileDialog; wx.FileDialog = FD
+    try:
+        d = SettingsDialog(a); ANSWERS[:] = [YES]; d._on_import_settings(None)
+        for _ in range(30): app.Yield(True)
+        d.Destroy()
+    finally:
+        wx.FileDialog = orig
+    i18n._cache = None
+    assert i18n.get_global_remote2() == ("Lib", "/this/pc/lib"), i18n.get_global_remote2()
+    i18n.set_global_remote2("", ""); i18n.set_language("en")
+
+@case
+def B37_status_shows_remote_has_new_commits():
+    # review #6: Status never fetched, so a clean tree behind the remote showed green.
+    base, a, b = mkrepos()
+    sh("echo t > t.txt && git add . && git commit -qm team && git push -q", b)
+    kind = sd._status_fn(log, a, "P")
+    assert kind != "clean", "green although the remote has a new commit"
+    assert any("behind" in l.lower() or "落後" in l for l in LOG), LOG
+
+@case
+def B38_settings_save_with_invalid_remote2_keeps_dialog_open():
+    # review #7: Save closed the dialog (losing the input) even when validation failed.
+    from rtnexen_git_tools.settings_dialog import SettingsDialog
+    base, a, b = mkrepos()
+    d = SettingsDialog(a)
+    for _ in range(50): app.Yield(True)
+    d.name2_ctrl.SetValue("Lib"); d.path2_ctrl.SetValue("/no/such/repo")
+    ended = []
+    d.EndModal = lambda code: ended.append(code)
+    d._on_save(None)
+    still = d.path2_ctrl.GetValue(); d.Destroy()
+    assert ended == [], "dialog closed although Remote 2 was rejected"
+    assert still == "/no/such/repo"
+
+@case
+def B39_update_check_runs_automatically_and_respects_skip():
+    # review #9: check_for_update_async was never called; "Skip this version" had no effect.
+    from rtnexen_git_tools import git_runner as gr, update_check as uc
+    calls = []
+    orig = uc.check_for_update_async
+    uc.check_for_update_async = lambda v: calls.append(v)
+    orig_md = gr.MainMenuDialog
+    class FakeMenu:
+        def __init__(s, p): pass
+        def ShowModal(s): return wx.ID_CANCEL
+        def Destroy(s): pass
+    gr.MainMenuDialog = FakeMenu
+    try:
+        gr.run_main_dialog("/tmp"); gr.run_main_dialog("/tmp")
+    finally:
+        uc.check_for_update_async = orig; gr.MainMenuDialog = orig_md
+    assert len(calls) == 1, "automatic update check calls: %r" % calls
+
+@case
+def B40_remote2_inside_project_repo_is_rejected():
+    # review #10: a plain sub-folder of the project repo was accepted as Remote 2, so the
+    # "library" push committed the whole project repo.
+    base, a, b = mkrepos()
+    os.makedirs(os.path.join(a, "lib"))
+    sh(f"git config rtnexen.remote2scope project && git config rtnexen.remote2name Lib && git config rtnexen.remote2path {os.path.join(a, 'lib')}", a)
+    names = [c["name"] for c in common.get_target_configs(a)]
+    assert names == [common.get_target_configs(a)[0]["name"]], names
+
+# ── Settings -> Restore to a commit (v3.5.3) ──
+
+@case
+def E08_restore_overwrites_local_keeps_history_and_plain_push_works():
+    from rtnexen_git_tools import restore_dialog as rs
+    base, a, b = mkrepos()
+    c1 = git(a, "rev-parse", "HEAD")
+    sh("echo 2 > extra.txt && printf 'L1\\nNEW\\nL3\\n' > board.kicad_pcb && git add . && git commit -qm c2 && git push -q", a)
+    before = git(a, "rev-parse", "HEAD")
+    sh("echo dirty > board.kicad_pcb && echo keep > untracked.txt", a)     # uncommitted edit + untracked file
+    kind, detail = rs.restore_to_commit(a, c1, c1[:7], "init")
+    assert kind == "ok", (kind, detail)
+    assert open(os.path.join(a, "board.kicad_pcb")).read() == "L1\nL2\nL3\n", "board not restored"
+    assert not os.path.exists(os.path.join(a, "extra.txt")), "file added after the commit is still there"
+    assert open(os.path.join(a, "untracked.txt")).read().strip() == "keep", "untracked file was touched"
+    assert git(a, "rev-parse", "HEAD~1") == before, "history was rewritten"
+    assert git(a, "log", "-1", "--format=%s").startswith("Restore to ")
+    run_worker(pd._push_one, log, a, "msg")                                  # plain push: fast-forward, no force needed
+    remote = os.path.join(base, "remote.git")
+    assert git(remote, "rev-parse", "main") == git(a, "rev-parse", "HEAD"), "\n".join(LOG)
+    assert git(remote, "show", "main:board.kicad_pcb") == "L1\nL2\nL3"
+
+@case
+def E09_restore_overwrites_dirty_file_whose_index_entry_equals_the_commit():
+    from rtnexen_git_tools import restore_dialog as rs
+    base, a, b = mkrepos()
+    c1 = git(a, "rev-parse", "HEAD")
+    sh("echo scratch > board.kicad_pcb", a)                                  # tracked file edited, HEAD == c1
+    kind, detail = rs.restore_to_commit(a, c1, c1[:7], "init")
+    assert kind == "same", (kind, detail)
+    assert open(os.path.join(a, "board.kicad_pcb")).read() == "L1\nL2\nL3\n", "dirty edit survived the restore"
+    assert git(a, "status", "--porcelain") == ""
+
+@case
+def E10_restore_confirmation_requires_typing_the_commit_id():
+    from rtnexen_git_tools import restore_dialog as rs
+    base, a, b = mkrepos()
+    c = rs.list_commits(a)[0]
+    d = rs._ConfirmDialog(None, {"name": "P", "path": a}, c, [" M board.kicad_pcb"])
+    states = []
+    for text in ("", "wrong", c["short"][:-1], c["short"].upper()):
+        d.entry.SetValue(text); states.append(d.ok_btn.IsEnabled())
+    d.Destroy()
+    assert states == [False, False, False, True], states
+
+@case
+def E11_restore_dialog_lists_commits_and_blocks_unsafe_states():
+    import time
+    from rtnexen_git_tools import restore_dialog as rs
+    from rtnexen_git_tools.settings_dialog import SettingsDialog
+    base, a, b = mkrepos()
+    sh("echo 2 > f.txt && git add . && git commit -qm second", a)
+    d = rs.RestoreDialog(None, a)
+    for _ in range(100): app.Yield(True); time.sleep(0.01)
+    rows, enabled0 = d.list.GetItemCount(), d.restore_btn.IsEnabled()
+    d.list.Select(1)
+    for _ in range(100): app.Yield(True); time.sleep(0.01)
+    enabled1, diff = d.restore_btn.IsEnabled(), d.diff.GetValue()
+    d.Destroy()
+    assert rows == 2 and not enabled0 and enabled1 and "f.txt" in diff, (rows, enabled0, enabled1, diff)
+    s = SettingsDialog(a)
+    labels = []
+    def walk(w):
+        for c in w.GetChildren(): labels.append(c.GetLabel()); walk(c)
+    walk(s); s.Destroy()
+    assert any("Restore" in l for l in labels), labels
+    # an untracked file sharing a path with a file of the target commit is reported
+    sh("git rm -q f.txt && git commit -qm rm && echo mine > f.txt", a)
+    assert rs.untracked_collisions(a, git(a, "rev-parse", "HEAD~1")) == ["f.txt"]
+    # unsafe states are refused
+    sh("git checkout -q --detach", a)
+    assert rs.blocking_problem(a) == "restore_err_detached"
 
 for k, v in RESULTS.items(): print(f"{k:55s} {v}")

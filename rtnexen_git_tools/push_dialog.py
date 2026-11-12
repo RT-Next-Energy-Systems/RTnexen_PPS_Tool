@@ -6,10 +6,10 @@ import hashlib
 import threading
 
 from .i18n import t, t_en, get_commit_draft, set_commit_draft, clear_commit_draft
-from .common import (APPNAME, ID_BACK, _run, get_dialog_size, _build_target_choices,
+from .common import (APPNAME, ID_BACK, _run, get_dialog_size, _build_target_choices, targets_for_choice,
                       untrack_ignored_files, ask_push_nff_dialog,
                       _rebase_in_progress, ask_stuck_rebase_dialog,
-                      pull_rebase_or_rollback, force_push_fresh_lease)
+                      pull_rebase_or_rollback)
 from .base_dialog import BaseGitDialog
 from .status_dialog import _make_dot_bitmap, STATUS_DOT_COLORS
 from .pull_dialog import _is_non_fast_forward
@@ -182,21 +182,9 @@ class PushDialog(BaseGitDialog):
             self.dot_bitmaps[kind] = dot_bmp
             cs.Add(panel_k, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 14)
 
-        # ── Overwrite-after-commit option (force push without waiting for a
-        # non-fast-forward rejection). Strict local up-to-date checks run in
-        # run_push() and _push_one() when this is enabled. ──
-        self.overwrite_chk = wx.CheckBox(p, label=t("overwrite_after_commit"))
-        self.overwrite_chk.Bind(wx.EVT_CHECKBOX, self._on_overwrite_toggle)
-        cs.Add(self.overwrite_chk, 0, wx.LEFT | wx.RIGHT | wx.TOP, 14)
-        self.overwrite_hint = wx.StaticText(p, label=t("overwrite_after_commit_hint"))
-        self.overwrite_hint.SetForegroundColour(wx.Colour(220, 80, 60))
-        self.overwrite_hint.Wrap(get_dialog_size(0.48, 0.82)[0] - 60)
-        cs.Add(self.overwrite_hint, 0, wx.LEFT | wx.RIGHT | wx.TOP, 14)
-
         self.ok_btn = self.add_bottom_buttons(t("btn_push_submit"))
         self.FinalizeLayout()
         self._update_msg_panels()
-        self.content_sizer.Show(self.overwrite_hint, False)
         self._load_drafts()
         self._intercept_close_buttons()
         wx.CallAfter(self._load_async)
@@ -290,10 +278,7 @@ class PushDialog(BaseGitDialog):
         self.EndModal(wx.ID_CANCEL)
 
     def _selected_targets(self):
-        sel = self.target_radio.GetStringSelection()
-        if sel == "ALL":
-            return list(self.targets)
-        return [cfg for cfg in self.targets if cfg["name"] == sel] or [self.targets[0]]
+        return targets_for_choice(self.targets, self.target_radio.GetSelection())
 
     def _on_target_change(self, event):
         self._refresh_status()
@@ -375,16 +360,6 @@ class PushDialog(BaseGitDialog):
     def GetTargets(self):
         return self._selected_targets()
 
-    def GetOverwrite(self):
-        return self.overwrite_chk.GetValue()
-
-    def _on_overwrite_toggle(self, event):
-        on = self.overwrite_chk.GetValue()
-        self.content_sizer.Show(self.overwrite_hint, on)
-        self.ok_btn.SetLabel(t("btn_overwrite_remote") if on else t("btn_push_submit"))
-        self.content_sizer.Layout()
-        self.panel.Layout()
-
 # ── .gitignore auto-creation ───────────────────────────────────────────────
 
 GITIGNORE_TEMPLATE = """# KiCad backup & autosave files
@@ -436,40 +411,13 @@ def _ensure_gitignore(log, path):
 def _push_fn(log, project_path):
     targets = _push_fn._targets
     messages = _push_fn._messages
-    overwrite = getattr(_push_fn, "_overwrite", False)
 
     for cfg in targets:
         if len(targets) > 1:
             log(f"\n══════ {cfg['name']} ══════")
-        _push_one(log, cfg["path"], messages[cfg["kind"]], overwrite)
+        _push_one(log, cfg["path"], messages[cfg["kind"]])
 
-def _overwrite_push(log, path, branch):
-    """Overwrite the remote branch with the local one, after strictly making
-    sure the local side is complete and up to date:
-      1. every local change is committed (working tree clean),
-      2. the remote-tracking ref is freshly fetched, so --force-with-lease
-         compares against the real current remote and the user sees exactly
-         which remote commits are about to be dropped."""
-    st = _run(["git", "status", "--porcelain"], path)
-    if st.returncode != 0 or st.stdout.strip():
-        log(t("log_overwrite_dirty", files=(st.stdout.strip() or st.stderr.strip())))
-        return False
-    log(t("log_overwrite_local_ok"))
-    if not force_push_fresh_lease(log, path, branch):
-        return False
-    clear_commit_draft(path)
-    return True
-
-def _push_one(log, path, commit_msg, overwrite=False):
-    if overwrite:
-        log(t("log_overwrite_mode"))
-        if _rebase_in_progress(path):
-            log(t("log_overwrite_rebase"))
-            return
-        if not _run(["git", "branch", "--show-current"], path).stdout.strip():
-            log(t("log_overwrite_no_branch"))
-            return
-
+def _push_one(log, path, commit_msg):
     _ensure_gitignore(log, path)
 
     removed = untrack_ignored_files(path)
@@ -499,9 +447,6 @@ def _push_one(log, path, commit_msg, overwrite=False):
             return
 
     branch = _run(["git", "branch", "--show-current"], path).stdout.strip()
-    if overwrite:
-        _overwrite_push(log, path, branch)
-        return
 
     log(t("log_pushing"))
     args = ["git", "push", "origin", branch] if branch else ["git", "push", "origin"]
@@ -533,10 +478,6 @@ def _push_one(log, path, commit_msg, overwrite=False):
                     return
                 log(t("log_push_done"))
                 clear_commit_draft(path)
-                return
-            elif choice == "force":
-                if force_push_fresh_lease(log, path, branch):
-                    clear_commit_draft(path)
                 return
             else:
                 log(t("log_push_skip_nff"))
