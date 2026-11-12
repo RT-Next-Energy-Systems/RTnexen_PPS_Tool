@@ -12,9 +12,8 @@ Test ids: `kicad:<scenario>` = real KiCad pcbnew editor (tests/kicad/run_all.sh)
 | P1 | Push: commit + push | kicad:push_basic win:W3 unit:E04 |
 | P2 | Push: nothing to commit, unpushed commits | unit:B18 |
 | P3 | Push rejected → Pull & Push (incl. conflict rollback) | kicad:push_nff_pull unit:B05 unit:B06 unit:B19 win:W7 |
-| P4 | Push rejected → Force Push | kicad:push_nff_force unit:B23 win:W6 |
-| P5 | Push: overwrite remote after commit (new) | kicad:overwrite unit:E01 unit:E02 win:W8 win:W11 |
-| P6 | Overwrite blocked by unsaved schematic / PCB (KiCad 7–10 autosave layouts) | kicad:overwrite_block unit:E03 unit:B25 unit:B26 |
+| P4 | Push rejected → Skip (Force Push was removed in v3.5.3; the dialog offers only Pull & Push / Skip) | kicad:push_nff_skip unit:B23 win:W6 |
+| P5 | Settings → Restore to a commit: pick a commit, typed confirmation, overwrite local files, plain Push afterwards (new in v3.5.3) | unit:E01 unit:E08 unit:E09 unit:E10 unit:E11 win:W8 win:W11 |
 | P7 | Push drafts: cancel → save → reopen → clear; autofill; empty message | kicad:draft unit:B22 unit:B24 unit:E05 |
 | P8 | Push right after Pull / Pull & Push (stale board in editor) | kicad:stale unit:B14 unit:B32 |
 | P9 | Push ALL / single targets (incl. Remote 2 named "ALL") | kicad:settings unit:B35 |

@@ -8,7 +8,7 @@ from .common import (APPNAME, ID_BACK, _run, is_git_repo, get_dialog_size,
                       untrack_ignored_files, ask_push_nff_dialog,
                       _rebase_in_progress, ask_stuck_rebase_dialog,
                       porcelain_lines, pull_rebase_or_rollback, watch_open_board,
-                      force_push_fresh_lease, is_repo_root)
+                      is_repo_root)
 from .base_dialog import BaseGitDialog
 from .pull_dialog import (
     _get_branch, _ensure_upstream, _do_pull, _discard_local_changes, _take_remote,
@@ -232,8 +232,6 @@ def _batch_push_one(log, path, commit_msg):
                     return "failed"
                 log(t("log_push_done"))
                 return "ok"
-            elif choice == "force":
-                return "ok" if force_push_fresh_lease(log, path, branch_now) else "failed"
             else:
                 log(t("log_push_skip_nff"))
                 return "skipped"

@@ -1,4 +1,4 @@
-# teammate pushed; user edits another file -> push rejected -> "Pull & Push" ; then again with Force Push
+# teammate pushed; user edits another file -> push rejected -> "Pull & Push" (NFF_MODE=pull_push) or "Skip" (NFF_MODE=skip)
 from kdrv import *
 A = proj(); MODE = os.environ.get("NFF_MODE", "pull_push")
 open(os.path.join(A, "notes.txt"), "w").write("mine")

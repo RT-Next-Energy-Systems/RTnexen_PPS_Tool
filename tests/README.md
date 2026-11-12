@@ -26,7 +26,7 @@ LANG=zh_TW.BIG5 PYTHONUTF8=0 xvfb-run -a python3 tests/test_ansi_codepage.py
 
 `test_windows_flows.py` is a portable flow test (no shell syntax) for a **Windows** Python with a
 zh-TW locale: pull / status / push with Chinese messages and file names, auto-merge, conflict →
-Overwrite Local, Force Push, Pull & Push rollback, overwrite mode, untracking, missing git, GUI.
+Overwrite Local, rejected push → Skip, Pull & Push rollback, restore to a commit, untracking, missing git, GUI.
 Run it on Windows with any Python that has wxPython and git on PATH:
 
 ```bash
